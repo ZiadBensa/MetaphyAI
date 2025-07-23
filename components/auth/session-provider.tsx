@@ -7,7 +7,7 @@ import type { Session } from "next-auth"
 
 interface Props {
   children: React.ReactNode
-  session: Session | null
+  session?: Session | null // <-- Make session optional
 }
 
 export default function AuthSessionProvider({ children, session }: Props) {

@@ -2,16 +2,19 @@
 
 import { signIn, getSession } from "next-auth/react"
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Sparkles, Chrome, AlertCircle } from "lucide-react"
+import Image from "next/image"
+import Link from "next/link"
 
 export default function SignIn() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   useEffect(() => {
     // Check if user is already signed in
@@ -20,7 +23,17 @@ export default function SignIn() {
         router.push("/")
       }
     })
-  }, [router])
+
+    // Show error messages for different error types
+    const errorType = searchParams.get("error");
+    if (errorType === "AccessDenied") {
+      setError("Login cancelled. Please try again if you wish to sign in.");
+    } else if (errorType === "OAuthAccountNotLinked") {
+      setError("This email is already linked with another provider. Please use the correct provider to sign in.");
+    } else if (errorType) {
+      setError("An unknown error occurred. Please try again.");
+    }
+  }, [router, searchParams])
 
   const handleGoogleSignIn = async () => {
     try {
@@ -48,12 +61,19 @@ export default function SignIn() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="mx-auto h-12 w-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center mb-4">
-            <Sparkles className="h-6 w-6 text-white" />
+          <div className="mx-auto h-20 w-20 rounded-xl flex items-center justify-center mb-4 bg-white shadow">
+            <Image
+              src="/Agora.jpeg"
+              alt="App Logo"
+              width={80}
+              height={80}
+              className="object-contain rounded-xl"
+              priority
+            />
           </div>
-          <CardTitle className="text-2xl">Welcome to AI Text Tools</CardTitle>
+          <CardTitle className="text-2xl">Welcome to AgoraAI</CardTitle>
           <CardDescription>
-            Sign in with your Google account to access text extraction and humanization features
+            Sign in with your Google account to access the AI tools and features.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -77,6 +97,17 @@ export default function SignIn() {
               </>
             )}
           </Button>
+
+          {/* Return to Home Page button */}
+          <Link href="/" passHref>
+            <Button
+              type="button"
+              variant="secondary"
+              className="w-full mt-2"
+            >
+              Return to Home Page
+            </Button>
+          </Link>
 
           <div className="text-center text-sm text-gray-600">
             <p>By signing in, you agree to our Terms of Service and Privacy Policy</p>
