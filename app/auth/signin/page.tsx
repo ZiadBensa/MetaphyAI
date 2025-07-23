@@ -41,7 +41,7 @@ export default function SignIn() {
       setError("")
 
       const result = await signIn("google", {
-        callbackUrl: "/",
+        callbackUrl: "/tools",
         redirect: false,
       })
 
