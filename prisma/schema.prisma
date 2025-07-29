@@ -14,4 +14,18 @@ model User {
   avatar    String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  documents Document[]
+}
+
+model Document {
+  id             String   @id @default(dbgenerated("concat('doc_', replace(cast(gen_random_uuid() as text), '-', '') )"))
+  user           User     @relation(fields: [userId], references: [id])
+  userId         String
+  fileName       String
+  mimeType       String
+  driveFileId    String
+  webViewLink    String?
+  webContentLink String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }

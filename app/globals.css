@@ -92,3 +92,28 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-20px); }
+}
+.animate-float { animation: float 6s ease-in-out infinite; }
+.animate-float-slow { animation: float 12s ease-in-out infinite; }
+.animate-float-reverse { animation: float 8s ease-in-out infinite reverse; }
+@keyframes gradient-move {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+.animate-gradient-move { background-size: 200% 200%; animation: gradient-move 16s ease-in-out infinite; }
+
+@keyframes slide-in {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+.animate-slide-in { animation: slide-in 0.3s cubic-bezier(0.4,0,0.2,1) both; }
+
+@keyframes slide-out {
+  from { transform: translateX(0); }
+  to { transform: translateX(100%); }
+}
+.animate-slide-out { animation: slide-out 0.3s cubic-bezier(0.4,0,0.2,1) both; }

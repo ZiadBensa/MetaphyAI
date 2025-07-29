@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { FileText, Image as ImageIcon, Sparkles, FileSymlink, Menu, X } from "lucide-react"
+import { FileText, Image as ImageIcon, Sparkles, FileSymlink, Menu, X, Download, Trash, UploadCloud } from "lucide-react"
 import AuthGuard from "@/components/auth/auth-guard"
 import TextExtractor from "@/components/text-extractor"
 import TextHumanizer from "@/components/text-humanizer"
@@ -11,6 +11,17 @@ import { useSession } from "next-auth/react"
 import UserMenu from "@/components/auth/user-menu"
 import React from "react"
 import { useToast } from "@/hooks/use-toast"
+import {
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog"
 
 // AdvancedOptionsPanel component
 function AdvancedOptionsPanel({ children, label = "Advanced Options" }: { children: React.ReactNode; label?: string }) {
@@ -456,31 +467,101 @@ export default function Home() {
   const [ariaMessage, setAriaMessage] = useState("")
   const { toast } = useToast ? useToast() : { toast: () => {} }
   const selectedTool = tools.find(t => t.key === selected)
+  const [documentsOpen, setDocumentsOpen] = useState(false)
+  const [isPanelVisible, setIsPanelVisible] = useState(false)
+  const [docFilter, setDocFilter] = useState('all')
+  const fileTypes = [
+    { key: 'all', label: 'All' },
+    { key: 'image', label: 'Images' },
+    { key: 'pdf', label: 'PDFs' },
+    { key: 'doc', label: 'Docs' },
+    { key: 'presentation', label: 'Presentations' },
+    { key: 'text', label: 'Text' },
+  ]
+  function getTypeKey(type: string) {
+    if (type.startsWith('image/')) return 'image'
+    if (type === 'application/pdf') return 'pdf'
+    if (type === 'text/plain') return 'text'
+    if (type.includes('presentation')) return 'presentation'
+    if (type.includes('wordprocessingml')) return 'doc'
+    return 'other'
+  }
+  const [galleryFilesState, setGalleryFilesState] = useState<any[]>([])
+
+  // Fetch files from Google Drive AgoraAI folder when opening the panel
+  async function fetchDocuments() {
+    const res = await fetch('/api/drive-list')
+    if (res.ok) {
+      const data = await res.json()
+      setGalleryFilesState((data.files || []).map((file: any) => ({
+        id: file.id,
+        name: file.name,
+        type: file.mimeType,
+        typeLabel: getTypeKey(file.mimeType).charAt(0).toUpperCase() + getTypeKey(file.mimeType).slice(1),
+        thumbnail: file.mimeType.startsWith('image/') ? file.webContentLink || '/placeholder-logo.png' : '/placeholder-logo.png',
+        driveFileId: file.id,
+        webViewLink: file.webViewLink,
+        webContentLink: file.webContentLink,
+        createdAt: file.createdTime,
+        updatedAt: file.modifiedTime,
+      })))
+    }
+  }
+
+  function openDocumentsPanel() {
+    fetchDocuments()
+    setDocumentsOpen(true)
+    setIsPanelVisible(true)
+  }
+  // Close panel
+  function closeDocumentsPanel() {
+    setDocumentsOpen(false)
+    setTimeout(() => setIsPanelVisible(false), 300)
+  }
+
+  function addFileToGallery(file: File, base64: string) {
+    setGalleryFilesState(prev => [
+      {
+        id: Date.now(),
+        name: file.name,
+        type: file.type,
+        typeLabel: getTypeKey(file.type).charAt(0).toUpperCase() + getTypeKey(file.type).slice(1),
+        thumbnail: file.type.startsWith('image/') ? base64 : '/placeholder-logo.png',
+        base64,
+      },
+      ...prev,
+    ])
+  }
+  function handleFileInput(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onload = ev => {
+        addFileToGallery(file, ev.target?.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+  function handleDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault()
+    const file = e.dataTransfer.files?.[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onload = ev => {
+        addFileToGallery(file, ev.target?.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+  function handleDragOver(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault()
+  }
 
   // File type support per tool
   const toolFileTypes: Record<string, string[]> = {
     pdf: ["application/pdf"],
     extractor: ["application/pdf", "image/png", "image/jpeg", "image/jpg"],
   }
-
-  // Global drag events
-  React.useEffect(() => {
-    function onDragEnter(e: DragEvent) {
-      if (e.dataTransfer?.types.includes("Files")) setIsDragging(true)
-    }
-    function onDragLeave(e: DragEvent) {
-      if (e.relatedTarget == null || (e.target as HTMLElement)?.nodeName === "HTML") setIsDragging(false)
-    }
-    function onDrop() { setIsDragging(false) }
-    window.addEventListener("dragenter", onDragEnter)
-    window.addEventListener("dragleave", onDragLeave)
-    window.addEventListener("drop", onDrop)
-    return () => {
-      window.removeEventListener("dragenter", onDragEnter)
-      window.removeEventListener("dragleave", onDragLeave)
-      window.removeEventListener("drop", onDrop)
-    }
-  }, [])
 
   // Drag-and-drop handlers for sidebar
   function handleSidebarDragOver(toolKey: string, e: React.DragEvent) {
@@ -519,6 +600,115 @@ export default function Home() {
     if (toolKey === "converter") return <DocumentConverterWithOptions />
     return null
   }
+
+  // Exporting state
+  const [exportingId, setExportingId] = useState<number | null>(null)
+  async function handleExport(file: any) {
+    setExportingId(file.id)
+    try {
+      // Check for duplicate file name in Drive
+      const driveListRes = await fetch('/api/drive-list')
+      if (driveListRes.ok) {
+        const driveListData = await driveListRes.json()
+        const duplicate = (driveListData.files || []).find((f: any) => f.name === file.name)
+        if (duplicate) {
+          toast({
+            title: "Duplicate file name",
+            description: `A file named '${file.name}' already exists in your AgoraAI Drive folder. Please rename your file or delete the existing one first.`,
+            variant: "destructive",
+          })
+          setExportingId(null)
+          return
+        }
+      }
+      const base64 = file.base64 || btoa("Dummy file content for " + file.name)
+      const res = await fetch("/api/drive-upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ file: base64, fileName: file.name, mimeType: file.type })
+      })
+      const data = await res.json()
+      if (data.success) {
+        // Save document metadata to backend (optional, can be removed if not syncing DB)
+        // await fetch('/api/documents', {
+        //   method: 'POST',
+        //   headers: { 'Content-Type': 'application/json' },
+        //   body: JSON.stringify({
+        //     fileName: file.name,
+        //     mimeType: file.type,
+        //     driveFileId: data.file.id,
+        //     webViewLink: data.file.webViewLink,
+        //     webContentLink: data.file.webContentLink,
+        //   })
+        // })
+        // Refetch documents
+        await fetchDocuments()
+        toast({
+          title: "Exported to Google Drive!",
+          description: `View in Drive: ${data.file.webViewLink || data.file.id}`,
+          variant: "success",
+          duration: 5000,
+        })
+      } else {
+        toast({
+          title: "Export failed",
+          description: data.error || "Unknown error",
+          variant: "destructive",
+        })
+      }
+    } catch (err: any) {
+      toast({
+        title: "Export failed",
+        description: err.message,
+        variant: "destructive",
+      })
+    } finally {
+      setExportingId(null)
+    }
+  }
+
+  // Add state for delete dialog
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [fileToDelete, setFileToDelete] = useState<any>(null)
+
+  // Update handleDelete to work with dialog
+  async function confirmDelete() {
+    if (!fileToDelete?.driveFileId) return
+    try {
+      const res = await fetch('/api/drive-delete', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileId: fileToDelete.driveFileId })
+      })
+      const data = await res.json()
+      if (data.success) {
+        toast({
+          title: 'File deleted',
+          description: `${fileToDelete.name} was removed from your AgoraAI Drive folder.`,
+          variant: 'success',
+        })
+        await fetchDocuments()
+      } else {
+        toast({
+          title: 'Delete failed',
+          description: data.error || 'Unknown error',
+          variant: 'destructive',
+        })
+      }
+    } catch (err: any) {
+      toast({
+        title: 'Delete failed',
+        description: err.message,
+        variant: 'destructive',
+      })
+    } finally {
+      setDeleteDialogOpen(false)
+      setFileToDelete(null)
+    }
+  }
+
+  // Filtered files for gallery
+  const filteredFiles = docFilter === 'all' ? galleryFilesState : galleryFilesState.filter(f => getTypeKey(f.type) === docFilter)
 
   return (
     <AuthGuard>
@@ -572,6 +762,20 @@ export default function Home() {
                 </button>
               ))}
             </nav>
+            {/* Documents panel toggle button at the bottom */}
+            <div className="mt-auto px-4 pb-4">
+              <button
+                onClick={() => {
+                  if (!isPanelVisible) openDocumentsPanel()
+                  else closeDocumentsPanel()
+                }}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 hover:bg-slate-100 dark:hover:bg-[#23232a] text-gray-700 dark:text-gray-200 w-full ${documentsOpen ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300' : ''}`}
+              >
+                <svg className="h-5 w-5 text-blue-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M7 7v10M17 7v10M5 5h14a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2z" /></svg>
+                Documents
+              </button>
+            </div>
+            {/* Remove Documents tab at the bottom */}
             <div className="p-4 text-xs text-gray-400 dark:text-gray-500 border-t border-slate-200 dark:border-slate-800">
               © {new Date().getFullYear()} AgoraAI
             </div>
@@ -609,7 +813,109 @@ export default function Home() {
             </main>
           </div>
         </div>
+        {/* Document Gallery Section as a panel */}
+        {isPanelVisible && (
+          <>
+            {/* Overlay */}
+            <div className="fixed inset-0 z-30 bg-black/30" onClick={closeDocumentsPanel} />
+            <aside className={`fixed right-0 top-0 h-full w-full max-w-xl z-40 bg-white dark:bg-[#18181b] shadow-lg border-l border-slate-200 dark:border-slate-700 transition-transform duration-300 overflow-y-auto ${documentsOpen ? 'animate-slide-in' : 'animate-slide-out'}`}>
+              <div className="p-6">
+                <div className="flex items-center gap-4 mb-6">
+                  <h2 className="text-2xl font-bold flex-1">Your Documents</h2>
+                  <button onClick={closeDocumentsPanel} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-2xl font-bold focus:outline-none">&times;</button>
+                </div>
+                {/* Upload area */}
+                <div
+                  className="mb-6 p-4 border-2 border-dashed border-blue-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/10 transition"
+                  onDrop={handleDrop}
+                  onDragOver={handleDragOver}
+                >
+                  <input type="file" id="file-upload" className="hidden" onChange={handleFileInput} />
+                  <label htmlFor="file-upload" className="cursor-pointer flex flex-col items-center">
+                    <UploadCloud className="h-8 w-8 text-blue-500 mb-2" />
+                    <span className="text-sm text-blue-700 dark:text-blue-300 font-medium">Click or drag a file here to upload</span>
+                  </label>
+                </div>
+                {/* Filter Tabs */}
+                <div className="flex gap-2 mb-6">
+                  {fileTypes.map(ft => (
+                    <button
+                      key={ft.key}
+                      onClick={() => setDocFilter(ft.key)}
+                      className={`px-3 py-1 rounded-full text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${docFilter === ft.key ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300' : 'hover:bg-slate-100 dark:hover:bg-[#23232a] text-gray-700 dark:text-gray-200'}`}
+                    >
+                      {ft.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                  {filteredFiles.length === 0 && <div className="col-span-full text-center text-gray-400 py-12">No documents found.</div>}
+                  {(docFilter === 'all' ? galleryFilesState : galleryFilesState.filter(f => getTypeKey(f.type) === docFilter)).map(file => (
+                    <div
+                      key={file.id}
+                      className="relative bg-white dark:bg-[#18181b] rounded-lg shadow p-3 flex flex-col items-center cursor-pointer hover:shadow-lg transition group"
+                      draggable
+                      onDragStart={e => { e.dataTransfer.setData('text/plain', file.id.toString()) }}
+                    >
+                      {/* Preview: image for images, icon for others */}
+                      {file.type.startsWith('image/') ? (
+                        <img src={file.thumbnail} alt={file.name} className="w-32 h-20 object-cover rounded mb-2" />
+                      ) : (
+                        <div className="w-32 h-20 flex items-center justify-center bg-slate-100 dark:bg-[#23232a] rounded mb-2">
+                          <svg className="w-10 h-10 text-blue-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M7 7v10M17 7v10M5 5h14a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2z" /></svg>
+                        </div>
+                      )}
+                      <div className="font-medium truncate w-full text-center" title={file.name}>{file.name}</div>
+                      <div className="text-xs text-gray-500 mb-2">{file.typeLabel}</div>
+                      <div className="flex flex-row gap-2 mt-auto w-full justify-center">
+                        <a
+                          title="Download"
+                          className="p-2 rounded hover:bg-blue-100 dark:hover:bg-blue-900/40 transition"
+                          href={file.webContentLink || file.webViewLink || '#'}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          download
+                          onClick={e => { if (!file.webContentLink && !file.webViewLink) { e.preventDefault(); toast({ title: 'No download link available', variant: 'destructive' }) } }}
+                        >
+                          <Download className="h-5 w-5 text-blue-500" />
+                        </a>
+                        <button
+                          title="Delete"
+                          className="p-2 rounded hover:bg-red-100 dark:hover:bg-red-900/40 transition"
+                          onClick={() => { setFileToDelete(file); setDeleteDialogOpen(true); }}
+                        >
+                          <Trash className="h-5 w-5 text-red-500" />
+                        </button>
+                        <button title="Export to Google Drive" className="p-2 rounded hover:bg-green-100 dark:hover:bg-green-900/40 transition" onClick={() => handleExport(file)} disabled={exportingId === file.id}>
+                          {exportingId === file.id ? (
+                            <span className="animate-spin"><UploadCloud className="h-5 w-5 text-green-500" /></span>
+                          ) : (
+                            <UploadCloud className="h-5 w-5 text-green-500" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </aside>
+          </>
+        )}
       </div>
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this file?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete <span className="font-semibold">{fileToDelete?.name}</span> from your AgoraAI Drive folder? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AuthGuard>
   )
 }

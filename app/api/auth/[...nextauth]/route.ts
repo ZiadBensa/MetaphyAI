@@ -10,6 +10,11 @@ export const authOptions: NextAuthOptions = {
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID ?? "dev-google-client-id",
       clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "dev-google-client-secret",
+      authorization: {
+        params: {
+          scope: "openid email profile https://www.googleapis.com/auth/drive.file"
+        }
+      }
     }),
   ],
   callbacks: {
