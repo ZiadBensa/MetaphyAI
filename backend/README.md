@@ -1,102 +1,164 @@
-# AgoraAI FastAPI Backend
+# AI Tools Backend
 
-This is the FastAPI backend for AgoraAI, featuring advanced text humanization using regex-based transformations.
+A modular FastAPI backend for AI-powered tools with a clean, organized structure.
 
-## Features
+## 🏗️ Project Structure
 
-- **Text Humanization**: Uses advanced regex-based transformations to rewrite AI-generated text with different tones
-- **Multiple Tone Support**: Casual, Friendly, Professional, Enthusiastic, and Neutral tones
-- **File Upload & Text Extraction**: Upload files and extract text (simulated)
-- **User Authentication**: Protected endpoints with user session management
-- **Database Integration**: Stores interaction history in PostgreSQL
-
-## Setup
-
-### 1. Install Dependencies
-
-```bash
-pip install -r requirements.txt
+```
+backend/
+├── core/                    # Core application modules
+│   ├── __init__.py
+│   ├── config.py           # Application settings
+│   └── dependencies.py     # Shared utilities and dependencies
+├── tools/                   # AI tools modules
+│   ├── __init__.py
+│   └── text_humanizer/     # Text humanization tool
+│       ├── __init__.py
+│       ├── models.py       # Data models
+│       ├── router.py       # API endpoints
+│       └── utils.py        # Utility functions
+├── main.py                 # Main FastAPI application
+├── requirements.txt        # Python dependencies
+└── README.md              # This file
 ```
 
-**Note**: No heavy AI models required! The text humanization uses efficient regex-based transformations.
+## 🚀 Getting Started
 
-### 2. Environment Variables
+### Prerequisites
 
-Create a `.env` file in the backend directory:
+- Python 3.8+
+- pip
 
-```env
-DATABASE_URL=postgresql://username:password@localhost:5432/agoraai_db
-SECRET_KEY=your-secret-key-here
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=30
+### Installation
+
+1. **Clone the repository** (if not already done)
+2. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. **Run the backend:**
+   ```bash
+   python main.py
+   ```
+
+The server will start at `http://localhost:8000`
+
+## 🛠️ Available Tools
+
+### Text Humanizer
+
+**Endpoint:** `/text-humanizer`
+
+Transforms AI-generated text to sound more natural and human-like.
+
+#### Features:
+- **Multiple Tones:** Casual, Friendly, Professional, Enthusiastic, Neutral
+- **Two Models:** Regex-based (fast) and T5 AI model (advanced)
+- **Chunking:** Handles long texts by processing sentence by sentence
+- **Real-time Processing:** Shows loading states during processing
+
+#### API Endpoints:
+
+- `GET /text-humanizer/health` - Health check
+- `POST /text-humanizer/load-model` - Load AI model
+- `POST /text-humanizer/humanize` - Humanize text
+
+#### Example Request:
+```json
+{
+  "text": "I am going to the store to purchase some groceries.",
+  "tone": "casual",
+  "model": "huggingface"
+}
 ```
 
-### 3. Database Setup
-
-Make sure your PostgreSQL database is running and the tables are created:
-
-```bash
-# The tables will be created automatically when you run the app
-# thanks to Base.metadata.create_all(bind=engine) in main.py
+#### Example Response:
+```json
+{
+  "humanized_text": "I'm going to the store to grab some groceries.",
+  "tone": "casual",
+  "model": "huggingface",
+  "processing_time": 1.23
+}
 ```
 
-### 4. Run the Backend
+## 🔧 Adding New Tools
 
-```bash
-# Option 1: Using the run script
-python run_backend.py
+To add a new AI tool:
 
-# Option 2: Direct uvicorn command
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-```
+1. **Create a new tool directory:**
+   ```bash
+   mkdir tools/your_tool_name
+   ```
 
-## API Endpoints
+2. **Create the tool structure:**
+   ```
+   tools/your_tool_name/
+   ├── __init__.py
+   ├── models.py      # Data models
+   ├── router.py      # API endpoints
+   └── utils.py       # Utility functions
+   ```
 
-### Text Humanization
-- **POST** `/ai/humanize/`
-  - **Body**: `{"text": "AI generated text", "tone": "casual"}`
-  - **Response**: `{"humanized_text": "Humanized version", "tone": "casual"}`
+3. **Include the router in main.py:**
+   ```python
+   from tools.your_tool_name.router import router as your_tool_router
+   app.include_router(your_tool_router)
+   ```
 
-### File Upload & Extraction
-- **POST** `/ai/extract/upload`
-  - **Form Data**: `file` (PDF, DOCX, image)
-  - **Response**: `{"text": "Extracted text", "filename": "file.pdf"}`
-
-### Authentication
-- **GET** `/protected-test` - Test authenticated endpoint
-
-## API Documentation
+## 📚 API Documentation
 
 Once the server is running, visit:
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
+- **Swagger UI:** `http://localhost:8000/docs`
+- **ReDoc:** `http://localhost:8000/redoc`
 
-## Text Humanization Features
+## 🔍 Health Checks
 
-The text humanization system uses advanced regex-based transformations:
+- **Global Health:** `GET /health`
+- **Tool Health:** `GET /text-humanizer/health`
 
-### Supported Tones:
-- **Casual**: Converts formal language to casual contractions and simpler words
-- **Friendly**: Adds warm, approachable language patterns
-- **Professional**: Converts casual language to formal, business-like expressions
-- **Enthusiastic**: Uses energetic and positive language
-- **Neutral**: Balances formal and informal language
+## 🐛 Troubleshooting
 
-### Transformation Examples:
-- "I am going" → "I'm going" (casual)
-- "Furthermore" → "Also" (casual)
-- "Hello" → "Hi there" (friendly)
-- "I'm" → "I am" (professional)
-- "Good" → "Excellent" (enthusiastic)
+### Common Issues:
 
-## Troubleshooting
+1. **Model Loading Failed:**
+   - The app will fallback to regex-based humanization
+   - Check your internet connection for model download
 
-### Performance
-The regex-based approach is very fast and doesn't require heavy computational resources.
+2. **Port Already in Use:**
+   - Change the port in `core/config.py`
+   - Or kill the process using the port
 
-### CORS Issues
-The backend is configured to allow requests from:
-- http://localhost:3000 (Next.js frontend)
-- http://localhost:8000 (direct backend access)
+3. **Dependencies Issues:**
+   - Try: `pip install --upgrade -r requirements.txt`
+   - On Windows, some packages might need Visual Studio Build Tools
 
-Add your production frontend URL to the `origins` list in `main.py` if needed. 
+## 🏗️ Architecture
+
+### Core Module (`core/`)
+- **config.py:** Centralized configuration management
+- **dependencies.py:** Shared utilities, validation functions
+
+### Tools Module (`tools/`)
+- Each tool is self-contained with its own models, router, and utilities
+- Easy to add new tools without affecting existing ones
+- Consistent API patterns across all tools
+
+### Benefits:
+- ✅ **Modular:** Easy to add new tools
+- ✅ **Maintainable:** Clean separation of concerns
+- ✅ **Scalable:** Each tool can be developed independently
+- ✅ **Testable:** Isolated components for better testing
+- ✅ **Documented:** Clear structure and documentation
+
+## 🤝 Contributing
+
+1. Follow the existing structure for new tools
+2. Add proper error handling and validation
+3. Include tests for new functionality
+4. Update this README for new features
+
+## 📄 License
+
+This project is part of the AI Tools Backend system. 

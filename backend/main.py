@@ -1,58 +1,83 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+"""
+Main FastAPI application for AI Tools Backend.
+"""
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
 import logging
+from contextlib import asynccontextmanager
 
-# Fix relative imports by using absolute imports
-from database import engine, Base, get_db
-import models
-import schemas
-from routers import ai
-from dependencies import get_current_user_id
+from core.config import settings
+from core.dependencies import get_logger
+from tools.text_humanizer.router import router as text_humanizer_router, load_huggingface_model
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
-# Create database tables
-Base.metadata.create_all(bind=engine)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan events."""
+    # Startup
+    logger.info("🚀 Starting AI Tools Backend...")
+    logger.info("📦 Loading Hugging Face model...")
+    
+    # Load the text humanizer model
+    success = load_huggingface_model()
+    if success:
+        logger.info("✅ Hugging Face model loaded successfully!")
+    else:
+        logger.warning("⚠️ Hugging Face model failed to load, will use regex-based humanization")
+    
+    logger.info(f"🌐 Backend will be available at: http://{settings.HOST}:{settings.PORT}")
+    logger.info(f"📚 API documentation at: http://{settings.HOST}:{settings.PORT}/docs")
+    
+    yield
+    
+    # Shutdown
+    logger.info("🛑 Shutting down AI Tools Backend...")
 
+# Create FastAPI app
 app = FastAPI(
-    title="AI Text Tools Backend",
-    description="FastAPI backend for text extraction and humanization with user history.",
-    version="1.0.0",
+    title=settings.PROJECT_NAME,
+    version=settings.VERSION,
+    description=settings.DESCRIPTION,
+    lifespan=lifespan
 )
 
-# Configure CORS for frontend communication
-origins = [
-    "http://localhost:3000",  # Your Next.js frontend
-    "http://localhost:8000",  # For local testing of backend directly
-    # Add your production frontend URL here
-]
-
+# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=settings.BACKEND_CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Include routers
-app.include_router(ai.router, prefix="/ai", tags=["AI Tools"])
+app.include_router(text_humanizer_router)
 
 @app.get("/")
 async def root():
-    return {"message": "Welcome to the AI Text Tools Backend!"}
+    """Root endpoint."""
+    return {
+        "message": "AI Tools Backend",
+        "version": settings.VERSION,
+        "docs": "/docs",
+        "tools": ["text-humanizer"]
+    }
 
-# Example of a protected route to test authentication
-@app.get("/protected-test")
-async def protected_test(user_id: str = Depends(get_current_user_id)):
-    return {"message": f"Hello, user {user_id}! You are authenticated."}
+@app.get("/health")
+async def health_check():
+    """Global health check endpoint."""
+    return {
+        "status": "healthy",
+        "message": "Backend is running",
+        "version": settings.VERSION
+    }
 
 if __name__ == "__main__":
     import uvicorn
-    logger.info("Starting AgoraAI FastAPI Backend...")
-    logger.info("Backend will be available at: http://localhost:8000")
-    logger.info("API documentation at: http://localhost:8000/docs")
-    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+    uvicorn.run(
+        "main:app",
+        host=settings.HOST,
+        port=settings.PORT,
+        reload=settings.RELOAD
+    )
