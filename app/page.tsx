@@ -250,89 +250,7 @@ function TextExtractorWithOptions({ droppedFileName, autoProcess }: { droppedFil
   )
 }
 
-function TextHumanizerWithOptions() {
-  const [tone, setTone] = useState("professional")
-  const [formality, setFormality] = useState("medium")
-  const [history, setHistory] = useState<Array<{ id: number; label: string; date: string; snippet: string; fullText: string }>>([])
-  const [result, setResult] = useState<string>("")
-  const [inputText, setInputText] = useState<string>("")
-  function handleHumanize() {
-    const fakeHumanized = `Humanized (${tone}, ${formality})\n${inputText}\n\nThis is a more natural, friendly version.`
-    setResult(fakeHumanized)
-    setHistory(prev => [
-      { id: Date.now(), label: "Text Input", date: new Date().toLocaleString(), snippet: fakeHumanized.slice(0, 100) + (fakeHumanized.length > 100 ? "..." : ""), fullText: fakeHumanized },
-      ...prev.slice(0, 9)
-    ])
-  }
-  function handleCopy(text: string) { navigator.clipboard.writeText(text) }
-  function handleClear(id: number) { setHistory(prev => prev.filter(item => item.id !== id)) }
-  function handleClearAll() { setHistory([]) }
-  return (
-    <div className="p-8">
-      <h2 className="text-2xl font-bold mb-4">Text Humanizer</h2>
-      <p className="mb-4 text-gray-600 dark:text-gray-300">Paste or type AI-generated or formal text and convert it to natural, human-like writing.</p>
-      <AdvancedOptionsPanel>
-        <div className="mb-4">
-          <label className="block font-medium mb-1">Tone</label>
-          <div className="flex gap-3">
-            {['professional', 'casual', 'friendly'].map(opt => (
-              <label key={opt} className="flex items-center gap-1 cursor-pointer">
-                <input
-                  type="radio"
-                  name="tone"
-                  value={opt}
-                  checked={tone === opt}
-                  onChange={() => setTone(opt)}
-                  className="accent-blue-600"
-                />
-                <span className="capitalize">{opt}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-        <div>
-          <label className="block font-medium mb-1">Formality Level</label>
-          <div className="flex gap-3">
-            {['low', 'medium', 'high'].map(opt => (
-              <label key={opt} className="flex items-center gap-1 cursor-pointer">
-                <input
-                  type="radio"
-                  name="formality"
-                  value={opt}
-                  checked={formality === opt}
-                  onChange={() => setFormality(opt)}
-                  className="accent-blue-600"
-                />
-                <span className="capitalize">{opt}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-      </AdvancedOptionsPanel>
-      {/* Simulated text input */}
-      <div className="mb-4">
-        <textarea
-          className="w-full border rounded px-2 py-1 dark:bg-[#18181b] dark:border-gray-700 min-h-[80px]"
-          placeholder="Paste or type your text here..."
-          value={inputText}
-          onChange={e => setInputText(e.target.value)}
-        />
-        <Button onClick={handleHumanize} type="button" className="mt-2">Humanize</Button>
-      </div>
-      {/* Main result */}
-      {result && (
-        <div className="mb-6 p-4 bg-slate-50 dark:bg-[#23232a] rounded border border-slate-200 dark:border-slate-700">
-          <div className="flex justify-between items-center mb-2">
-            <span className="font-semibold">Result</span>
-            <Button size="sm" variant="outline" onClick={() => handleCopy(result)}>Copy</Button>
-          </div>
-          <div className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">{result}</div>
-        </div>
-      )}
-      <ResultsHistoryPanel history={history} onCopy={handleCopy} onClear={handleClear} onClearAll={handleClearAll} />
-    </div>
-  )
-}
+
 
 function DocumentConverterWithOptions() {
   const [fromFormat, setFromFormat] = useState("pdf")
@@ -440,7 +358,7 @@ const tools = [
     key: "humanizer",
     name: "Text Humanizer",
     icon: <Sparkles className="h-5 w-5" />,
-    component: <TextHumanizerWithOptions />,
+    component: <TextHumanizer />,
   },
   {
     key: "converter",
@@ -596,7 +514,7 @@ export default function Home() {
   function getToolComponent(toolKey: string) {
     if (toolKey === "pdf") return <PdfSummarizer droppedFileName={droppedFile?.tool === "pdf" ? droppedFile.fileName : undefined} autoProcess={!!droppedFile?.file && droppedFile.tool === "pdf"} />
     if (toolKey === "extractor") return <TextExtractorWithOptions droppedFileName={droppedFile?.tool === "extractor" ? droppedFile.fileName : undefined} autoProcess={!!droppedFile?.file && droppedFile.tool === "extractor"} />
-    if (toolKey === "humanizer") return <TextHumanizerWithOptions />
+    if (toolKey === "humanizer") return <TextHumanizer />
     if (toolKey === "converter") return <DocumentConverterWithOptions />
     return null
   }
@@ -718,8 +636,8 @@ export default function Home() {
         {/* ARIA live region for accessibility */}
         <div aria-live="polite" className="sr-only">{ariaMessage}</div>
         {/* Top Bar/Header */}
-        <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-20">
-          <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+        <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-20 h-16">
+          <div className="flex items-center justify-between h-full px-6">
             <div className="flex items-center gap-3">
               <div className="h-8 w-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
                 <Sparkles className="h-4 w-4 text-white" />
@@ -741,10 +659,10 @@ export default function Home() {
         </header>
 
         {/* Main Layout: Sidebar + Main Content */}
-        <div className="flex flex-1 min-h-0">
-          {/* Sidebar */}
-          <aside className={`fixed z-30 top-[64px] md:top-[72px] left-0 bg-white dark:bg-[#18181b] border-r border-slate-200 dark:border-slate-800 w-60 flex-col h-[calc(100vh-64px)] md:h-[calc(100vh-72px)] transition-transform duration-200 transform ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0 md:static md:flex`}>
-            <nav className="flex-1 flex flex-col gap-1 p-4 overflow-y-auto">
+        <div className="flex flex-1 h-[calc(100vh-64px)]">
+          {/* Fixed Sidebar */}
+          <aside className={`fixed z-30 top-16 left-0 bg-white dark:bg-[#18181b] border-r border-slate-200 dark:border-slate-800 w-60 h-[calc(100vh-64px)] transition-transform duration-200 transform ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0 flex flex-col`}>
+            <nav className="flex flex-col gap-1 p-4 flex-1">
               {tools.map(tool => (
                 <button
                   key={tool.key}
@@ -763,7 +681,7 @@ export default function Home() {
               ))}
             </nav>
             {/* Documents panel toggle button at the bottom */}
-            <div className="mt-auto px-4 pb-4">
+            <div className="px-4 pb-4">
               <button
                 onClick={() => {
                   if (!isPanelVisible) openDocumentsPanel()
@@ -775,7 +693,7 @@ export default function Home() {
                 Documents
               </button>
             </div>
-            {/* Remove Documents tab at the bottom */}
+            {/* Copyright */}
             <div className="p-4 text-xs text-gray-400 dark:text-gray-500 border-t border-slate-200 dark:border-slate-800">
               © {new Date().getFullYear()} AgoraAI
             </div>
@@ -786,8 +704,8 @@ export default function Home() {
             <div className="fixed inset-0 z-20 bg-black/30 md:hidden" onClick={() => setSidebarOpen(false)} aria-label="Sidebar overlay" />
           )}
 
-          {/* Main Content */}
-          <div className="flex-1 flex flex-col min-h-0 ml-0 md:ml-60">
+          {/* Main Content Area - Fixed Height with Internal Scrolling */}
+          <div className="flex-1 flex flex-col ml-0 md:ml-60 h-full">
             {/* Top bar for mobile to open sidebar */}
             <div className="md:hidden flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-[#18181b]/80 sticky top-0 z-10">
               <div className="flex items-center gap-2">
@@ -798,10 +716,11 @@ export default function Home() {
                 <Menu className="h-6 w-6" />
               </button>
             </div>
-            {/* Tool workspace */}
-            <main className="flex-1 flex flex-col items-stretch bg-transparent overflow-y-auto">
-              <div className="flex items-start w-full h-full p-6">
-                <div className="w-full max-w-3xl">
+            
+            {/* Tool workspace - Fixed height with internal scrolling */}
+            <main className="flex-1 flex flex-col bg-transparent h-full overflow-hidden">
+              <div className="flex items-start w-full h-full p-6 overflow-y-auto">
+                <div className="w-full">
                   {/* Info bar */}
                   <div className="flex items-center gap-2 mb-6 bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200 px-4 py-2 rounded-md text-sm">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 flex-shrink-0"><path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25v3.75m0 0v.008m0-.008a.75.75 0 01.75.75h-.008a.75.75 0 01-.75-.75zm.75-7.5a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" /></svg>
