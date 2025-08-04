@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 
 from core.config import settings
 from core.dependencies import get_logger
-from tools.text_humanizer.router import router as text_humanizer_router, load_huggingface_model
+from tools.text_humanizer.router import router as text_humanizer_router
 
 logger = get_logger(__name__)
 
@@ -17,14 +17,10 @@ async def lifespan(app: FastAPI):
     """Application lifespan events."""
     # Startup
     logger.info("🚀 Starting AI Tools Backend...")
-    logger.info("📦 Loading Hugging Face model...")
+    logger.info("📦 Loading semantic-enhanced dictionary-based humanization system...")
     
-    # Load the text humanizer model
-    success = load_huggingface_model()
-    if success:
-        logger.info("✅ Hugging Face model loaded successfully!")
-    else:
-        logger.warning("⚠️ Hugging Face model failed to load, will use regex-based humanization")
+    # The semantic-enhanced dictionary system loads instantly
+    logger.info("✅ Semantic-enhanced dictionary-based humanization system ready!")
     
     logger.info(f"🌐 Backend will be available at: http://{settings.HOST}:{settings.PORT}")
     logger.info(f"📚 API documentation at: http://{settings.HOST}:{settings.PORT}/docs")

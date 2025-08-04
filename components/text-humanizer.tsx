@@ -9,42 +9,25 @@ import { Badge } from "@/components/ui/badge"
 import { Copy, RotateCcw, Sparkles, Eye, EyeOff } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
-const TONE_OPTIONS = [
-  { value: "casual", label: "Casual", color: "bg-blue-100 text-blue-800", description: "Relaxed and informal" },
-  { value: "friendly", label: "Friendly", color: "bg-green-100 text-green-800", description: "Warm and approachable" },
-  { value: "professional", label: "Professional", color: "bg-purple-100 text-purple-800", description: "Formal and business-like" },
-  { value: "enthusiastic", label: "Enthusiastic", color: "bg-orange-100 text-orange-800", description: "Energetic and excited" },
-  { value: "neutral", label: "Neutral", color: "bg-gray-100 text-gray-800", description: "Balanced and moderate" },
-]
-
 const MODEL_OPTIONS = [
   { 
     value: "regex", 
-    label: "Regex-based", 
-    description: "Fast, rule-based transformation",
+    label: "Basic Regex", 
+    description: "Simple rule-based transformation",
     color: "bg-yellow-100 text-yellow-800"
   },
   { 
-    value: "huggingface", 
-    label: "T5 AI Model", 
-    description: "Advanced AI paraphrasing model",
-    color: "bg-purple-100 text-purple-800"
+    value: "lucie7b", 
+    label: "Semantic Dictionary", 
+    description: "AI-powered semantic analysis with 32+ word patterns",
+    color: "bg-green-100 text-green-800"
   },
 ]
-
-const TONE_EXAMPLES = {
-  casual: "Hey! I'm heading to the store to grab some groceries. Won't be back until later.",
-  friendly: "Hi there! I'm going to the store to pick up some groceries. I'll see you later!",
-  professional: "I am going to the store to purchase some groceries. I will not be able to return until later.",
-  enthusiastic: "I'm super excited to head to the store and grab some awesome groceries! Can't wait to see you later!",
-  neutral: "I'm going to the store to get some groceries. I won't be back until later."
-}
 
 export default function TextHumanizer() {
   const [originalText, setOriginalText] = useState("")
   const [humanizedText, setHumanizedText] = useState("")
-  const [selectedTone, setSelectedTone] = useState("casual")
-  const [selectedModel, setSelectedModel] = useState("regex")
+  const [selectedModel, setSelectedModel] = useState("lucie7b")
   const [isLoading, setIsLoading] = useState(false)
   const [showComparison, setShowComparison] = useState(false)
   const [processingTime, setProcessingTime] = useState<number | null>(null)
@@ -53,8 +36,8 @@ export default function TextHumanizer() {
   const handleHumanize = async () => {
     if (!originalText.trim()) {
       toast({
-        title: "No text to humanize",
-        description: "Please enter some text to humanize.",
+        title: "No text to rephrase",
+        description: "Please enter some text to rephrase.",
         variant: "destructive",
       })
       return
@@ -72,7 +55,6 @@ export default function TextHumanizer() {
         },
         body: JSON.stringify({
           text: originalText,
-          tone: selectedTone,
           model: selectedModel,
         }),
       })
@@ -87,17 +69,15 @@ export default function TextHumanizer() {
       setProcessingTime(data.processing_time || (Date.now() - startTime) / 1000)
       
       const modelInfo = MODEL_OPTIONS.find(m => m.value === selectedModel)
-      const toneInfo = TONE_OPTIONS.find(t => t.value === selectedTone)
-      
       toast({
-        title: "Text humanized! ✨",
-        description: `Applied ${toneInfo?.label} tone using ${modelInfo?.label} in ${processingTime?.toFixed(2)}s`,
+        title: "Text rephrased! ✨",
+        description: `Rephrased using ${modelInfo?.label} in ${processingTime?.toFixed(2)}s`,
         variant: "default",
       })
     } catch (error) {
       console.error("Error humanizing text:", error)
       toast({
-        title: "Humanization failed",
+        title: "Rephrasing failed",
         description: "Please check if the backend server is running on port 8000.",
         variant: "destructive",
       })
@@ -127,21 +107,9 @@ export default function TextHumanizer() {
     })
   }
 
-  const handleToneChange = (tone: string) => {
-    setSelectedTone(tone)
-    if (humanizedText) {
-      // Re-humanize with new tone if we have text
-      setOriginalText(originalText)
-      setHumanizedText("")
-      setShowComparison(false)
-      setProcessingTime(null)
-    }
-  }
-
   const handleModelChange = (model: string) => {
     setSelectedModel(model)
     if (humanizedText) {
-      // Re-humanize with new model if we have text
       setOriginalText(originalText)
       setHumanizedText("")
       setShowComparison(false)
@@ -159,12 +127,8 @@ export default function TextHumanizer() {
 
   const getHighlightedText = (text: string, isHumanized: boolean) => {
     if (!text || !showComparison) return text
-
-    // Split into sentences for better highlighting
     const sentences = text.split(/(?<=[.!?])\s+/)
-    
     return sentences.map((sentence, index) => {
-      // Add subtle highlighting for humanized text
       if (isHumanized) {
         return (
           <span
@@ -181,24 +145,14 @@ export default function TextHumanizer() {
 
   const getWordLevelHighlights = (originalText: string, humanizedText: string) => {
     if (!showComparison || !originalText || !humanizedText) return humanizedText
-
-    // Split both texts into words while preserving spacing and punctuation
     const originalWords = originalText.split(/\s+/)
     const humanizedWords = humanizedText.split(/\s+/)
-    
-    // Create a mapping of changed words with their original counterparts
     const changedWords = new Map()
-    
-    // Compare words and mark changes
     for (let i = 0; i < Math.max(originalWords.length, humanizedWords.length); i++) {
       const originalWord = originalWords[i] || ''
       const humanizedWord = humanizedWords[i] || ''
-      
-      // Clean words for comparison (remove punctuation and normalize)
       const cleanOriginal = originalWord.replace(/[^\w]/g, '').toLowerCase()
       const cleanHumanized = humanizedWord.replace(/[^\w]/g, '').toLowerCase()
-      
-      // Check for contractions and their expanded forms
       const contractionMap: Record<string, string> = {
         "i'm": "i am", "you're": "you are", "it's": "it is", "that's": "that is",
         "we're": "we are", "they're": "they are", "can't": "cannot", "won't": "will not",
@@ -206,23 +160,17 @@ export default function TextHumanizer() {
         "wasn't": "was not", "weren't": "were not", "haven't": "have not", "hasn't": "has not",
         "hadn't": "had not", "wouldn't": "would not", "couldn't": "could not", "shouldn't": "should not"
       }
-      
       const normalizedOriginal = contractionMap[cleanOriginal] || cleanOriginal
       const normalizedHumanized = contractionMap[cleanHumanized] || cleanHumanized
-      
       if (normalizedOriginal !== normalizedHumanized && cleanHumanized) {
         changedWords.set(cleanHumanized, originalWord)
       }
     }
-    
-    // Split humanized text more carefully to preserve spacing
     const tokens = humanizedText.split(/(\s+)/)
     return tokens.map((token, index) => {
-      // Check if this token is a word (not just whitespace)
       const cleanToken = token.replace(/[^\w]/g, '').toLowerCase()
       const isChanged = changedWords.has(cleanToken)
       const originalWord = changedWords.get(cleanToken)
-      
       if (isChanged && cleanToken) {
         return (
           <span
@@ -257,8 +205,8 @@ export default function TextHumanizer() {
         </div>
       </div>
 
-      {/* Enhanced Controls with Better Visibility */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+      {/* Controls */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
         {/* Model Selection */}
         <Card className="border-2 border-blue-200 bg-blue-50">
           <CardHeader className="pb-2">
@@ -277,32 +225,6 @@ export default function TextHumanizer() {
                     <div className="flex flex-col">
                       <span className="font-medium">{model.label}</span>
                       <span className="text-xs text-gray-500">{model.description}</span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </CardContent>
-        </Card>
-
-        {/* Tone Selection */}
-        <Card className="border-2 border-green-200 bg-green-50">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">
-              Tone Style
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <Select value={selectedTone} onValueChange={handleToneChange}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select tone" />
-              </SelectTrigger>
-              <SelectContent>
-                {TONE_OPTIONS.map((tone) => (
-                  <SelectItem key={tone.value} value={tone.value}>
-                    <div className="flex flex-col">
-                      <span className="font-medium">{tone.label}</span>
-                      <span className="text-xs text-gray-500">{tone.description}</span>
                     </div>
                   </SelectItem>
                 ))}
@@ -338,7 +260,6 @@ export default function TextHumanizer() {
                   </div>
                 )}
               </Button>
-              
               <Button
                 variant="outline"
                 onClick={handleClear}
@@ -398,9 +319,6 @@ export default function TextHumanizer() {
                       <Sparkles className="w-3 h-3 mr-1" />
                       Enhanced
                     </Badge>
-                                         <Badge variant="outline" className="text-xs">
-                       {TONE_OPTIONS.find(t => t.value === selectedTone)?.label}
-                     </Badge>
                   </div>
                 )}
               </div>
@@ -456,37 +374,6 @@ export default function TextHumanizer() {
               </>
             )}
           </Button>
-        </div>
-      )}
-
-      {/* Enhanced Tone Examples with Better Visual Impact */}
-      {!originalText && !humanizedText && (
-        <div className="mt-4">
-          <div className="text-center mb-3">
-            <h3 className="text-sm font-medium text-gray-700">Try Different Tones</h3>
-            <p className="text-xs text-gray-500">Click any example to see how tones affect the text</p>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {TONE_OPTIONS.map((tone) => (
-              <div
-                key={tone.value}
-                className="p-3 rounded-lg border-2 border-gray-200 bg-white hover:border-blue-300 hover:shadow-md transition-all cursor-pointer group"
-                onClick={() => {
-                  setSelectedTone(tone.value)
-                  setOriginalText("I am going to the store to purchase some groceries. Furthermore, I will not be able to return until later.")
-                }}
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  <Badge className={`${tone.color} text-xs`}>
-                    {tone.label}
-                  </Badge>
-                </div>
-                <p className="text-xs text-gray-600 leading-relaxed group-hover:text-gray-800">
-                  {TONE_EXAMPLES[tone.value as keyof typeof TONE_EXAMPLES]}
-                </p>
-              </div>
-            ))}
-          </div>
         </div>
       )}
     </div>
