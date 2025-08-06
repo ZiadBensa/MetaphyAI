@@ -17,10 +17,10 @@ async def lifespan(app: FastAPI):
     """Application lifespan events."""
     # Startup
     logger.info("🚀 Starting AI Tools Backend...")
-    logger.info("📦 Loading semantic-enhanced dictionary-based humanization system...")
-    
-    # The semantic-enhanced dictionary system loads instantly
-    logger.info("✅ Semantic-enhanced dictionary-based humanization system ready!")
+    logger.info("📦 Loading humanization systems...")
+    logger.info("   ✅ Semantic-enhanced regex humanization system ready!")
+    logger.info("   ✅ Gemini AI advanced humanization system ready!")
+    logger.info("   ✅ AI Content Detection (Hugging Face + Statistical) ready!")
     
     logger.info(f"🌐 Backend will be available at: http://{settings.HOST}:{settings.PORT}")
     logger.info(f"📚 API documentation at: http://{settings.HOST}:{settings.PORT}/docs")

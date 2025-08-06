@@ -12,8 +12,21 @@ logger = get_logger(__name__)
 class SemanticEnhancedRegexHumanizer:
     """Semantic-aware enhanced regex-based text humanizer."""
     
-    def __init__(self, dictionary_path: str = "simple_synonyms.json", use_semantic_check: bool = True):
+    def __init__(self, dictionary_path: str = None, use_semantic_check: bool = True):
         """Initialize with dictionary and semantic checking."""
+        if dictionary_path is None:
+            # Try to find the comprehensive dictionary first, then fallback to simple
+            import os
+            backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            comprehensive_path = os.path.join(backend_dir, "comprehensive_synonyms.json")
+            simple_path = os.path.join(backend_dir, "simple_synonyms.json")
+            
+            # Try comprehensive dictionary first
+            if os.path.exists(comprehensive_path):
+                dictionary_path = comprehensive_path
+            else:
+                dictionary_path = simple_path
+        
         self.dictionary = self._load_dictionary(dictionary_path)
         self.use_semantic_check = use_semantic_check
         self.regex_patterns = self._create_semantic_regex_patterns()
@@ -21,9 +34,13 @@ class SemanticEnhancedRegexHumanizer:
         
     def _load_dictionary(self, path: str) -> Dict[str, List[str]]:
         """Load synonym dictionary from JSON file."""
+        logger.info(f"Attempting to load dictionary from: {path}")
+        
         try:
             with open(path, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                dictionary = json.load(f)
+                logger.info(f"Successfully loaded dictionary with {len(dictionary)} words")
+                return dictionary
         except FileNotFoundError:
             logger.warning(f"Dictionary file {path} not found, using built-in dictionary")
             return self._get_builtin_dictionary()
@@ -33,50 +50,28 @@ class SemanticEnhancedRegexHumanizer:
     
     def _get_builtin_dictionary(self) -> Dict[str, List[str]]:
         """Fallback built-in dictionary."""
+        try:
+            from .comprehensive_dictionary import get_comprehensive_synonyms
+            return get_comprehensive_synonyms()
+        except ImportError:
         from .improved_semantic_rules import get_context_aware_dictionary
         return get_context_aware_dictionary()
     
     def _get_semantic_similarity(self, word1: str, word2: str) -> float:
-        """Get semantic similarity between two words using NLTK WordNet."""
-        try:
-            import nltk
-            from nltk.corpus import wordnet
-            
-            # Download WordNet if not already downloaded
-            try:
-                nltk.data.find('corpora/wordnet')
-            except LookupError:
-                nltk.download('wordnet')
+        """Get semantic similarity between two words using NLTK WordNet with fallback."""
+        from .nltk_utils import safe_wordnet_similarity
             
             # Check cache first
             cache_key = f"{word1.lower()}_{word2.lower()}"
             if cache_key in self.semantic_cache:
                 return self.semantic_cache[cache_key]
             
-            # Get synsets for both words
-            synsets1 = wordnet.synsets(word1.lower())
-            synsets2 = wordnet.synsets(word2.lower())
-            
-            if not synsets1 or not synsets2:
-                # If no synsets found, return low similarity
-                self.semantic_cache[cache_key] = 0.1
-                return 0.1
-            
-            # Calculate maximum similarity between any synset pair
-            max_similarity = 0.0
-            for syn1 in synsets1:
-                for syn2 in synsets2:
-                    similarity = syn1.path_similarity(syn2)
-                    if similarity and similarity > max_similarity:
-                        max_similarity = similarity
+        # Use safe WordNet similarity with fallback
+        similarity = safe_wordnet_similarity(word1, word2)
             
             # Cache the result
-            self.semantic_cache[cache_key] = max_similarity
-            return max_similarity
-            
-        except Exception as e:
-            logger.warning(f"Error calculating semantic similarity: {e}")
-            return 0.1  # Default low similarity
+        self.semantic_cache[cache_key] = similarity
+        return similarity
     
     def _get_best_semantic_replacement(self, original_word: str, synonyms: List[str], context_words: List[str], full_text: str = "") -> str:
         """Choose the best synonym based on semantic similarity to context and text context."""
@@ -127,26 +122,13 @@ class SemanticEnhancedRegexHumanizer:
         return random.choice(synonyms) if synonyms else original_word
     
     def _extract_context_words(self, text: str, target_word: str) -> List[str]:
-        """Extract context words around the target word."""
+        """Extract context words around the target word with fallback."""
+        from .nltk_utils import safe_word_tokenize, safe_stopwords
+        
         try:
-            import nltk
-            from nltk.tokenize import word_tokenize
-            from nltk.corpus import stopwords
-            
-            # Download required NLTK data
-            try:
-                nltk.data.find('tokenizers/punkt')
-            except LookupError:
-                nltk.download('punkt')
-            
-            try:
-                nltk.data.find('corpora/stopwords')
-            except LookupError:
-                nltk.download('stopwords')
-            
-            # Tokenize text
-            words = word_tokenize(text.lower())
-            stop_words = set(stopwords.words('english'))
+            # Tokenize text using safe functions
+            words = safe_word_tokenize(text.lower())
+            stop_words = safe_stopwords()
             
             # Find target word position
             target_pos = -1
@@ -178,6 +160,7 @@ class SemanticEnhancedRegexHumanizer:
         patterns = []
         
         # Add dictionary-based patterns with semantic info
+        logger.info(f"Creating patterns from dictionary with {len(self.dictionary)} words")
         for word, synonyms in self.dictionary.items():
             if synonyms:
                 pattern = rf'\b{re.escape(word)}\b'
@@ -188,6 +171,7 @@ class SemanticEnhancedRegexHumanizer:
                     'type': 'dictionary'
                 }
                 patterns.append((pattern, synonyms[0], pattern_info))  # Default replacement
+                logger.debug(f"Added dictionary pattern: '{word}' -> '{synonyms[0]}'")
         
         # Add additional common patterns
         additional_patterns = [
@@ -230,6 +214,7 @@ class SemanticEnhancedRegexHumanizer:
         ]
         
         patterns.extend(additional_patterns)
+        logger.info(f"Created {len(patterns)} total patterns ({len(additional_patterns)} additional)")
         return patterns
     
     def humanize_text(self, text: str, tone: str = "neutral") -> str:
@@ -263,18 +248,13 @@ class SemanticEnhancedRegexHumanizer:
             return text
     
     def _split_sentences(self, text: str) -> List[str]:
-        """Split text into sentences."""
+        """Split text into sentences with fallback."""
+        from .nltk_utils import safe_sent_tokenize
+        
         try:
-            import nltk
-            from nltk.tokenize import sent_tokenize
-            
-            try:
-                nltk.data.find('tokenizers/punkt')
-            except LookupError:
-                nltk.download('punkt')
-            
-            return sent_tokenize(text)
-        except Exception:
+            return safe_sent_tokenize(text)
+        except Exception as e:
+            logger.warning(f"Sentence splitting failed: {e}")
             # Fallback to simple sentence splitting
             return [s.strip() for s in text.split('.') if s.strip()]
     
@@ -282,6 +262,9 @@ class SemanticEnhancedRegexHumanizer:
         """Apply semantic-aware paraphrasing transformations."""
         paraphrased_text = text
         changes_made = 0
+        
+        # Debug: Log the number of patterns
+        logger.info(f"Applying {len(self.regex_patterns)} patterns to text: {text[:50]}...")
         
         # Apply regex patterns with semantic awareness
         for pattern, default_replacement, pattern_info in self.regex_patterns:
@@ -305,12 +288,66 @@ class SemanticEnhancedRegexHumanizer:
                 start, end = match.span()
                 paraphrased_text = paraphrased_text[:start] + replacement + paraphrased_text[end:]
                 changes_made += 1
+                logger.info(f"Applied replacement: '{original_word}' -> '{replacement}'")
         
         # Log if no changes were made
         if changes_made == 0:
             logger.info(f"No semantic patterns matched for text: {text[:50]}...")
+            # Try simple fallback patterns
+            paraphrased_text = self._apply_fallback_patterns(text)
         
         return paraphrased_text
+    
+    def _apply_fallback_patterns(self, text: str) -> str:
+        """Apply simple fallback patterns when semantic patterns don't work."""
+        result = text
+        changes_made = 0
+        
+        # Simple fallback patterns
+        fallback_patterns = [
+            (r'\bI would like to\b', 'I want to'),
+            (r'\bI am\b', 'I\'m'),
+            (r'\bWe are\b', 'We\'re'),
+            (r'\bPlease provide\b', 'Please give'),
+            (r'\bimplementation\b', 'putting in place'),
+            (r'\bimplement\b', 'put in place'),
+            (r'\bmethodology\b', 'approach'),
+            (r'\bnecessitates\b', 'requires'),
+            (r'\bevaluation\b', 'assessment'),
+            (r'\bcomprehensive\b', 'thorough'),
+            (r'\bunderstanding\b', 'knowledge'),
+            (r'\bendeavors\b', 'tries'),
+            (r'\bleverage\b', 'use'),
+            (r'\bempirical\b', 'real-world'),
+            (r'\bqualitative\b', 'descriptive'),
+            (r'\bproposed\b', 'suggested'),
+            (r'\bextensive\b', 'thorough'),
+            (r'\bexisting\b', 'current'),
+            (r'\bframework\b', 'structure'),
+            (r'\bfurthermore\b', 'also'),
+            (r'\bbridge\b', 'connect'),
+            (r'\bgap\b', 'difference'),
+            (r'\bpurchase\b', 'buy'),
+            (r'\bcommence\b', 'start'),
+            (r'\bextended\b', 'pushed back'),
+            (r'\bexperiencing\b', 'having'),
+            (r'\bconsider\b', 'look at'),
+            (r'\bavailable\b', 'possible'),
+            (r'\bdifficulties\b', 'problems'),
+            (r'\boptions\b', 'choices'),
+        ]
+        
+        for pattern, replacement in fallback_patterns:
+            new_result = re.sub(pattern, replacement, result, flags=re.IGNORECASE)
+            if new_result != result:
+                result = new_result
+                changes_made += 1
+                logger.info(f"Fallback replacement: '{pattern}' -> '{replacement}'")
+        
+        if changes_made > 0:
+            logger.info(f"Applied {changes_made} fallback replacements")
+        
+        return result
     
     def _clean_text(self, text: str) -> str:
         """Clean and improve the text output."""

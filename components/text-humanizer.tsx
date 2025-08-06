@@ -6,10 +6,17 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Copy, RotateCcw, Sparkles, Eye, EyeOff } from "lucide-react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Copy, RotateCcw, Sparkles, Eye, EyeOff, Bot, User } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 const MODEL_OPTIONS = [
+  { 
+    value: "semantic", 
+    label: "Semantic Enhanced", 
+    description: "AI-powered semantic analysis with 50+ word patterns and context awareness",
+    color: "bg-green-100 text-green-800"
+  },
   { 
     value: "regex", 
     label: "Basic Regex", 
@@ -17,22 +24,79 @@ const MODEL_OPTIONS = [
     color: "bg-yellow-100 text-yellow-800"
   },
   { 
-    value: "lucie7b", 
-    label: "Semantic Dictionary", 
-    description: "AI-powered semantic analysis with 32+ word patterns",
-    color: "bg-green-100 text-green-800"
+    value: "gemini", 
+    label: "Gemini AI (Advanced)", 
+    description: "Google's Gemini AI for advanced text restructuring and natural language generation",
+    color: "bg-purple-100 text-purple-800"
   },
 ]
 
 export default function TextHumanizer() {
+  // AI Detection State
+  const [aiDetectionText, setAiDetectionText] = useState("")
+  const [aiDetectionResult, setAiDetectionResult] = useState<any>(null)
+  const [isAiDetecting, setIsAiDetecting] = useState(false)
+
+  // Text Humanization State
   const [originalText, setOriginalText] = useState("")
   const [humanizedText, setHumanizedText] = useState("")
-  const [selectedModel, setSelectedModel] = useState("lucie7b")
+  const [selectedModel, setSelectedModel] = useState("semantic")
   const [isLoading, setIsLoading] = useState(false)
   const [showComparison, setShowComparison] = useState(false)
   const [processingTime, setProcessingTime] = useState<number | null>(null)
+  const [aiDetection, setAiDetection] = useState<any>(null)
+  
   const { toast } = useToast()
 
+  // AI Detection Handler
+  const handleAiDetection = async () => {
+    if (!aiDetectionText.trim()) {
+      toast({
+        title: "No text to analyze",
+        description: "Please enter some text to detect AI content.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsAiDetecting(true)
+    
+    try {
+      const response = await fetch("http://localhost:8000/text-humanizer/detect-ai", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          text: aiDetectionText,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to detect AI content")
+      }
+
+      const data = await response.json()
+      setAiDetectionResult(data)
+      
+      toast({
+        title: "AI Detection Complete! 🔍",
+        description: data.is_ai_generated ? "AI content detected" : "Human-like content detected",
+        variant: "default",
+      })
+    } catch (error) {
+      console.error("Error detecting AI content:", error)
+      toast({
+        title: "Detection failed",
+        description: "Please check if the backend server is running on port 8000.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsAiDetecting(false)
+    }
+  }
+
+  // Text Humanization Handler
   const handleHumanize = async () => {
     if (!originalText.trim()) {
       toast({
@@ -56,6 +120,7 @@ export default function TextHumanizer() {
         body: JSON.stringify({
           text: originalText,
           model: selectedModel,
+          tone: "neutral",
         }),
       })
 
@@ -64,9 +129,14 @@ export default function TextHumanizer() {
       }
 
       const data = await response.json()
+      console.log('API Response:', data)
+      console.log('Humanized text:', data.humanized_text)
+      console.log('Original text:', originalText)
+      console.log('Same text?', data.humanized_text === originalText)
       setHumanizedText(data.humanized_text)
       setShowComparison(true)
       setProcessingTime(data.processing_time || (Date.now() - startTime) / 1000)
+      setAiDetection(data.ai_detection)
       
       const modelInfo = MODEL_OPTIONS.find(m => m.value === selectedModel)
       toast({
@@ -86,11 +156,17 @@ export default function TextHumanizer() {
     }
   }
 
-  const handleClear = () => {
+  const handleClear = (type: "ai" | "humanize") => {
+    if (type === "ai") {
+      setAiDetectionText("")
+      setAiDetectionResult(null)
+    } else {
     setOriginalText("")
     setHumanizedText("")
     setShowComparison(false)
     setProcessingTime(null)
+      setAiDetection(null)
+    }
     toast({
       title: "Cleared",
       description: "All text has been cleared.",
@@ -98,11 +174,11 @@ export default function TextHumanizer() {
     })
   }
 
-  const handleCopy = (text: string, type: "original" | "humanized") => {
+  const handleCopy = (text: string, type: string) => {
     navigator.clipboard.writeText(text)
     toast({
       title: "Copied!",
-      description: `${type === "original" ? "Original" : "Humanized"} text copied to clipboard.`,
+      description: `${type} text copied to clipboard.`,
       variant: "default",
     })
   }
@@ -117,30 +193,16 @@ export default function TextHumanizer() {
     }
   }
 
-  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>, type: "ai" | "humanize") => {
+    if (type === "ai") {
+      setAiDetectionText(e.target.value)
+    } else {
     setOriginalText(e.target.value)
+    }
     // Auto-resize the textarea
     const textarea = e.target
     textarea.style.height = 'auto'
     textarea.style.height = Math.max(400, textarea.scrollHeight) + 'px'
-  }
-
-  const getHighlightedText = (text: string, isHumanized: boolean) => {
-    if (!text || !showComparison) return text
-    const sentences = text.split(/(?<=[.!?])\s+/)
-    return sentences.map((sentence, index) => {
-      if (isHumanized) {
-        return (
-          <span
-            key={index}
-            className="bg-gradient-to-r from-yellow-50 to-orange-50 border-l-2 border-orange-200 pl-2 py-1 rounded-r-md"
-          >
-            {sentence}
-          </span>
-        )
-      }
-      return <span key={index}>{sentence}</span>
-    })
   }
 
   const getWordLevelHighlights = (originalText: string, humanizedText: string) => {
@@ -188,23 +250,165 @@ export default function TextHumanizer() {
 
   return (
     <div className="w-full h-full flex flex-col">
-      {/* Enhanced Header with Model Info */}
+      {/* Header */}
       <div className="text-center mb-4">
         <h1 className="text-xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent mb-2">
-          Text Humanizer
+          AI Text Tools
         </h1>
-        <div className="flex items-center justify-center gap-4 text-sm">
-          <Badge className={MODEL_OPTIONS.find(m => m.value === selectedModel)?.color}>
-            {MODEL_OPTIONS.find(m => m.value === selectedModel)?.label}
-          </Badge>
-          {processingTime && (
-            <Badge variant="outline" className="text-xs">
-              {processingTime.toFixed(2)}s
-            </Badge>
-          )}
-        </div>
+        <p className="text-sm text-gray-600">Detect AI content and humanize text</p>
       </div>
 
+      {/* Tabs */}
+      <Tabs defaultValue="ai-detection" className="w-full h-full flex flex-col">
+        <TabsList className="grid w-full grid-cols-2 mb-4">
+          <TabsTrigger value="ai-detection" className="flex items-center gap-2">
+            <Bot className="w-4 h-4" />
+            AI Detection
+          </TabsTrigger>
+          <TabsTrigger value="text-humanizer" className="flex items-center gap-2">
+            <User className="w-4 h-4" />
+            Text Humanizer
+          </TabsTrigger>
+        </TabsList>
+
+        {/* AI Detection Tab */}
+        <TabsContent value="ai-detection" className="flex-1 flex flex-col">
+          <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4 min-h-0">
+            {/* Input Text */}
+            <Card className="flex flex-col border-2 border-gray-200">
+              <CardHeader className="flex-shrink-0 pb-2">
+                <CardTitle className="flex items-center justify-between text-sm">
+                  <span className="text-gray-700">Text to Analyze</span>
+                  {aiDetectionText && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleCopy(aiDetectionText, "analysis")}
+                      className="h-5 w-5 p-0"
+                    >
+                      <Copy className="w-3 h-3" />
+                    </Button>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="flex-1 p-3 pt-0 min-h-0">
+                <Textarea
+                  value={aiDetectionText}
+                  onChange={(e) => handleTextChange(e, "ai")}
+                  placeholder="Paste text to detect if it's AI-generated..."
+                  className="h-full min-h-[400px] resize-none border-0 focus-visible:ring-0 text-gray-700 bg-gray-50 text-sm leading-relaxed"
+                  style={{ minHeight: '400px', height: 'auto' }}
+                />
+              </CardContent>
+            </Card>
+
+            {/* AI Detection Results */}
+            <Card className="flex flex-col border-2 border-blue-200 bg-blue-50">
+              <CardHeader className="flex-shrink-0 pb-2">
+                <CardTitle className="flex items-center justify-between text-sm">
+                  <span className="text-blue-700">AI Detection Results</span>
+                  {aiDetectionResult && (
+                    <Badge 
+                      variant="outline" 
+                      className={`text-xs ${
+                        aiDetectionResult.is_ai_generated 
+                          ? "border-red-300 text-red-700 bg-red-100" 
+                          : "border-green-300 text-green-700 bg-green-100"
+                      }`}
+                    >
+                      {aiDetectionResult.is_ai_generated ? "🤖 AI-Generated" : "👤 Human-like"}
+            </Badge>
+          )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="flex-1 p-3 pt-0 min-h-0">
+                {aiDetectionResult ? (
+                  <div className="space-y-4 text-sm">
+                    <div>
+                      <p className="font-medium mb-2">Analysis:</p>
+                      <p className="text-gray-600">{aiDetectionResult.analysis}</p>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      <div>
+                        <p className="text-xs font-medium text-gray-600 mb-2">Confidence Score</p>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className={`h-2 rounded-full ${
+                              aiDetectionResult.confidence > 0.7 ? 'bg-red-500' : 
+                              aiDetectionResult.confidence > 0.4 ? 'bg-yellow-500' : 'bg-green-500'
+                            }`}
+                            style={{ width: `${aiDetectionResult.confidence * 100}%` }}
+                          ></div>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">{(aiDetectionResult.confidence * 100).toFixed(1)}%</p>
+                      </div>
+                      
+                      <div>
+                        <p className="text-xs font-medium text-gray-600 mb-2">Individual Scores</p>
+                                <div className="space-y-1 max-h-32 overflow-y-auto">
+          {Object.entries(aiDetectionResult.scores).map(([key, value]) => (
+            <div key={key} className="flex justify-between text-xs">
+              <span className="capitalize">{key.replace('_', ' ')}:</span>
+              <span className="font-medium">
+                {key === 'ai_probability' || key === 'human_probability' 
+                  ? `${((value as number) * 100).toFixed(1)}%`
+                  : `${((value as number) * 100).toFixed(0)}%`
+                }
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-gray-400">
+                    <div className="text-center">
+                      <Bot className="w-6 h-6 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">AI detection results will appear here</p>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* AI Detection Actions */}
+          <div className="mt-4 flex justify-center">
+            <div className="flex gap-2">
+              <Button
+                onClick={handleAiDetection}
+                disabled={isAiDetecting || !aiDetectionText.trim()}
+                className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                size="sm"
+              >
+                {isAiDetecting ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Analyzing...
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Bot className="w-4 h-4" />
+                    Detect AI
+                  </div>
+                )}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => handleClear("ai")}
+                disabled={!aiDetectionText && !aiDetectionResult}
+                size="sm"
+              >
+                <RotateCcw className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* Text Humanizer Tab */}
+        <TabsContent value="text-humanizer" className="flex-1 flex flex-col">
       {/* Controls */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
         {/* Model Selection */}
@@ -262,7 +466,7 @@ export default function TextHumanizer() {
               </Button>
               <Button
                 variant="outline"
-                onClick={handleClear}
+                    onClick={() => handleClear("humanize")}
                 disabled={!originalText && !humanizedText}
                 size="sm"
               >
@@ -273,7 +477,7 @@ export default function TextHumanizer() {
         </Card>
       </div>
 
-      {/* Text Areas with Enhanced Visual Feedback */}
+          {/* Text Areas */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4 min-h-0">
         {/* Original Text */}
         <Card className="flex flex-col border-2 border-gray-200">
@@ -295,7 +499,7 @@ export default function TextHumanizer() {
           <CardContent className="flex-1 p-3 pt-0 min-h-0">
             <Textarea
               value={originalText}
-              onChange={handleTextChange}
+                  onChange={(e) => handleTextChange(e, "humanize")}
               placeholder="Paste your AI-generated text here..."
               className="h-full min-h-[400px] resize-none border-0 focus-visible:ring-0 text-gray-700 bg-gray-50 text-sm leading-relaxed"
               style={{ minHeight: '400px', height: 'auto' }}
@@ -303,7 +507,7 @@ export default function TextHumanizer() {
           </CardContent>
         </Card>
 
-        {/* Humanized Text with Enhanced Visual Feedback */}
+            {/* Humanized Text */}
         <Card className={`flex flex-col border-2 transition-all duration-300 ${
           showComparison 
             ? "border-orange-300 bg-gradient-to-br from-orange-50 to-yellow-50" 
@@ -353,7 +557,69 @@ export default function TextHumanizer() {
         </Card>
       </div>
 
-      {/* Enhanced Comparison Toggle */}
+          {/* AI Detection Panel for Humanizer */}
+          {aiDetection && (
+            <Card className="mt-4 border-2 border-blue-200 bg-blue-50">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <span className="text-blue-700">AI Content Analysis</span>
+                  <Badge 
+                    variant="outline" 
+                    className={`text-xs ${
+                      aiDetection.is_ai_generated 
+                        ? "border-red-300 text-red-700 bg-red-100" 
+                        : "border-green-300 text-green-700 bg-green-100"
+                    }`}
+                  >
+                    {aiDetection.is_ai_generated ? "🤖 AI-Generated" : "👤 Human-like"}
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="space-y-3">
+                  <div className="text-sm text-gray-700">
+                    <p className="font-medium mb-2">Analysis:</p>
+                    <p className="text-gray-600">{aiDetection.analysis}</p>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium text-gray-600">Confidence Score</p>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className={`h-2 rounded-full ${
+                            aiDetection.confidence > 0.7 ? 'bg-red-500' : 
+                            aiDetection.confidence > 0.4 ? 'bg-yellow-500' : 'bg-green-500'
+                          }`}
+                          style={{ width: `${aiDetection.confidence * 100}%` }}
+                        ></div>
+                      </div>
+                      <p className="text-xs text-gray-500">{(aiDetection.confidence * 100).toFixed(1)}%</p>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium text-gray-600">Individual Scores</p>
+                              <div className="space-y-1 max-h-32 overflow-y-auto">
+          {Object.entries(aiDetection.scores).map(([key, value]) => (
+            <div key={key} className="flex justify-between text-xs">
+              <span className="capitalize">{key.replace('_', ' ')}:</span>
+              <span className="font-medium">
+                {key === 'ai_probability' || key === 'human_probability' 
+                  ? `${((value as number) * 100).toFixed(1)}%`
+                  : `${((value as number) * 100).toFixed(0)}%`
+                }
+              </span>
+            </div>
+          ))}
+        </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Comparison Toggle */}
       {humanizedText && (
         <div className="mt-4 flex items-center justify-center">
           <Button
@@ -376,6 +642,8 @@ export default function TextHumanizer() {
           </Button>
         </div>
       )}
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }
