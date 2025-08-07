@@ -94,6 +94,48 @@ async def detect_ai_content_endpoint(request: AIDetectionRequest):
             analysis="Error occurred during analysis"
         )
 
+@router.post("/detect-ai-semantic", response_model=AIDetectionResponse)
+async def detect_ai_content_semantic_endpoint(request: AIDetectionRequest):
+    """
+    Detect if text is AI-generated using semantic pattern analysis.
+    """
+    start_time = time.time()
+    
+    # Validate input
+    text = validate_text_input(request.text)
+    
+    logger.info(f"Semantic AI detection started for text: {text[:100]}...")
+    
+    try:
+        from .semantic_ai_detector import detect_ai_content
+        result = detect_ai_content(text)
+        
+        processing_time = time.time() - start_time
+        logger.info(f"Semantic AI detection completed in {processing_time:.3f}s")
+        
+        return AIDetectionResponse(
+            is_ai_generated=result["is_ai_generated"],
+            confidence=result["confidence"],
+            scores=result["scores"],
+            analysis=result["analysis"]
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in semantic AI detection: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        # Return fallback response
+        return AIDetectionResponse(
+            is_ai_generated=False,
+            confidence=0.0,
+            scores={
+                "ai_probability": 0.0,
+                "human_probability": 1.0
+            },
+            analysis="Semantic detection failed"
+        )
+
 @router.post("/humanize", response_model=HumanizeResponse)
 async def humanize_text(request: HumanizeRequest):
     """
@@ -148,8 +190,22 @@ async def humanize_text(request: HumanizeRequest):
             ai_detection = detect_ai_content(text)
         except Exception as e:
             logger.warning(f"Failed to load statistical AI detector, falling back to Hugging Face method: {e}")
-            from .huggingface_ai_detector import detect_ai_content as fallback_detect
-            ai_detection = fallback_detect(text)
+            try:
+                from .huggingface_ai_detector import detect_ai_content as fallback_detect
+                ai_detection = fallback_detect(text)
+            except Exception as e2:
+                logger.warning(f"Failed to load Hugging Face AI detector, trying semantic detector: {e2}")
+                try:
+                    from .semantic_ai_detector import detect_ai_content as semantic_detect
+                    ai_detection = semantic_detect(text)
+                except Exception as e3:
+                    logger.error(f"All AI detectors failed: {e3}")
+                    ai_detection = {
+                        "is_ai_generated": False,
+                        "confidence": 0.0,
+                        "scores": {"ai_probability": 0.0},
+                        "analysis": "AI detection unavailable"
+                    }
         
         return HumanizeResponse(
             humanized_text=humanized_text,

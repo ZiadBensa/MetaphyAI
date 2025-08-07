@@ -61,16 +61,16 @@ class HuggingFaceAIDetector:
             ai_probability = probabilities[0][1].item()
             human_probability = probabilities[0][0].item()
             
-            # Use a higher threshold for AI detection to reduce false positives
-            # Only flag as AI if probability is > 0.7 (instead of 0.5)
-            is_ai_generated = ai_probability > 0.7
+            # Use a more sensitive threshold for AI detection
+            # Flag as AI if probability is > 0.55 (more sensitive)
+            is_ai_generated = ai_probability > 0.55
             
             # Calculate confidence based on how far from threshold
-            # More conservative confidence calculation
+            # More sensitive confidence calculation
             if is_ai_generated:
-                confidence = min((ai_probability - 0.7) * 3.33, 1.0)  # Scale to 0-1
+                confidence = min((ai_probability - 0.55) * 2.22, 1.0)  # Scale to 0-1
             else:
-                confidence = min((0.7 - ai_probability) * 3.33, 1.0)  # Scale to 0-1
+                confidence = min((0.55 - ai_probability) * 2.22, 1.0)  # Scale to 0-1
             
             # Generate analysis
             analysis = self._generate_analysis(ai_probability, is_ai_generated)
@@ -104,12 +104,16 @@ class HuggingFaceAIDetector:
             return "Moderate confidence that this text was AI-generated. Some patterns suggest automated content."
         elif ai_probability > 0.6:
             return "Low confidence in AI detection. The text shows some automated characteristics but could be human-written."
-        elif ai_probability > 0.4:
+        elif ai_probability > 0.55:
+            return "Slight indication of AI generation. The text shows some automated characteristics."
+        elif ai_probability > 0.5:
             return "Very low confidence in AI detection. The text shows mixed characteristics typical of human writing."
-        elif ai_probability > 0.2:
+        elif ai_probability > 0.4:
             return "Low probability of AI generation. The text appears to be human-written with natural language patterns."
-        else:
+        elif ai_probability > 0.2:
             return "Very low probability of AI generation. The text shows strong human writing characteristics."
+        else:
+            return "Extremely low probability of AI generation. The text shows very strong human writing characteristics."
 
 # Global instance for reuse
 _ai_detector_instance: Optional[HuggingFaceAIDetector] = None

@@ -1,5 +1,5 @@
 """
-Enhanced AI Content Detector for identifying AI-generated text with reduced margin of error.
+Enhanced AI Content Detector with multi-layer detection for improved accuracy.
 """
 import re
 import math
@@ -11,11 +11,11 @@ from core.dependencies import get_logger
 logger = get_logger(__name__)
 
 class AIContentDetector:
-    """Enhanced detector for AI-generated content using advanced statistical analysis."""
+    """Multi-layer AI content detector with improved accuracy."""
     
     def __init__(self):
         """Initialize the enhanced AI content detector."""
-        # AI-generated text indicators (expanded)
+        # Enhanced AI indicators with more specific patterns
         self.ai_indicators = {
             "formal_phrases": [
                 "it is important to note", "furthermore", "moreover", "in addition",
@@ -27,7 +27,15 @@ class AIContentDetector:
                 "it is important to emphasize", "it should be emphasized", "it is worth noting",
                 "it is important to highlight", "it is crucial to note", "it is essential to mention",
                 "it is imperative to emphasize", "it is important to consider", "it is worth considering",
-                "it is important to understand", "it is crucial to understand", "it is essential to understand"
+                "it is important to understand", "it is crucial to understand", "it is essential to understand",
+                "in order to", "for the purpose of", "with the aim of", "with the goal of",
+                "in an effort to", "in an attempt to", "in a bid to", "in a move to",
+                "as a means of", "as a way of", "as a method of", "as a strategy for",
+                "this demonstrates", "this shows", "this indicates", "this suggests",
+                "this reveals", "this illustrates", "this exemplifies", "this highlights",
+                "it is worth emphasizing", "it should be highlighted", "it is crucial to emphasize",
+                "it is essential to highlight", "it is important to stress", "it should be stressed",
+                "it is worth stressing", "it is crucial to stress", "it is essential to stress"
             ],
             "academic_phrases": [
                 "according to", "based on", "in terms of", "with respect to", "in relation to",
@@ -35,7 +43,10 @@ class AIContentDetector:
                 "as a result of", "as a consequence of", "due to the fact that",
                 "in accordance with", "in compliance with", "in conformity with",
                 "in line with", "in keeping with", "in agreement with", "in accordance with",
-                "in response to", "in reaction to", "in reply to", "in answer to"
+                "in response to", "in reaction to", "in reply to", "in answer to",
+                "with regard to", "in reference to", "in connection with", "in association with",
+                "in conjunction with", "in combination with", "in coordination with",
+                "in collaboration with", "in partnership with", "in cooperation with"
             ],
             "complex_words": [
                 "implementation", "methodology", "comprehensive", "analysis", "framework",
@@ -47,23 +58,25 @@ class AIContentDetector:
                 "comprehensive", "extensive", "thorough", "detailed", "elaborate", "sophisticated",
                 "advanced", "complex", "intricate", "nuanced", "sophisticated", "systematic",
                 "methodical", "analytical", "theoretical", "conceptual", "empirical", "quantitative",
-                "qualitative", "statistical", "probabilistic", "deterministic", "algorithmic"
+                "qualitative", "statistical", "probabilistic", "deterministic", "algorithmic",
+                "methodological", "systematic", "structured", "organized", "coordinated",
+                "integrated", "unified", "consolidated", "streamlined", "optimized"
             ],
-            "repetitive_patterns": [
-                "the", "and", "to", "of", "in", "is", "it", "that", "for", "with", "as", "be",
-                "on", "at", "this", "by", "from", "they", "we", "say", "her", "she", "or", "an",
-                "will", "my", "one", "all", "would", "there", "their", "what", "so", "up", "out",
-                "if", "about", "who", "get", "which", "go", "me", "when", "make", "can", "like",
-                "time", "no", "just", "him", "know", "take", "people", "into", "year", "your",
-                "good", "some", "could", "them", "see", "other", "than", "then", "now", "look",
-                "only", "come", "its", "over", "think", "also", "back", "after", "use", "two",
-                "how", "our", "work", "first", "well", "way", "even", "new", "want", "because",
-                "any", "these", "give", "day", "most", "us", "very", "just", "now", "then",
-                "here", "there", "where", "when", "why", "how", "what", "which", "who", "whom"
+            "ai_specific_patterns": [
+                "the following", "as follows", "in the following", "the following are",
+                "it should be noted that", "it is important to note that", "it is worth noting that",
+                "in conclusion", "to conclude", "in summary", "to summarize",
+                "firstly", "secondly", "thirdly", "finally", "lastly",
+                "on the one hand", "on the other hand", "in contrast", "however",
+                "nevertheless", "nonetheless", "despite this", "in spite of",
+                "in addition to", "furthermore", "moreover", "additionally",
+                "as a result", "consequently", "therefore", "thus", "hence",
+                "for example", "for instance", "such as", "including", "specifically",
+                "in particular", "especially", "notably", "significantly"
             ]
         }
         
-        # Human text indicators (expanded)
+        # Enhanced human indicators
         self.human_indicators = {
             "contractions": [
                 "don't", "can't", "won't", "isn't", "aren't", "wasn't", "weren't",
@@ -202,6 +215,7 @@ class AIContentDetector:
         formal_phrase_count = sum(text_lower.count(phrase) for phrase in self.ai_indicators["formal_phrases"])
         academic_phrase_count = sum(text_lower.count(phrase) for phrase in self.ai_indicators["academic_phrases"])
         complex_word_count = sum(words.count(word) for word in self.ai_indicators["complex_words"])
+        ai_pattern_count = sum(text_lower.count(pattern) for pattern in self.ai_indicators["ai_specific_patterns"])
         
         # Human indicators
         contraction_count = sum(text_lower.count(contraction) for contraction in self.human_indicators["contractions"])
@@ -210,11 +224,11 @@ class AIContentDetector:
         filler_word_count = sum(text_lower.count(filler) for filler in self.human_indicators["filler_words"])
         
         # Calculate scores
-        formal_score = (formal_phrase_count + academic_phrase_count + complex_word_count) / len(words)
+        formal_score = (formal_phrase_count + academic_phrase_count + complex_word_count + ai_pattern_count) / len(words)
         human_score = (contraction_count + informal_word_count + emotional_word_count + filler_word_count) / len(words)
         
-        # Enhanced normalization
-        return min(1.0, max(0.0, formal_score - human_score + 0.5))
+        # Enhanced normalization - More sensitive to AI patterns
+        return min(1.0, max(0.0, formal_score - human_score + 0.35))
     
     def _calculate_advanced_sentence_variety(self, text: str) -> float:
         """Calculate advanced sentence variety with multiple metrics."""
@@ -320,8 +334,24 @@ class AIContentDetector:
         
         return (ttr * 0.6 + normalized_k * 0.4)
     
+    def _calculate_ai_pattern_density(self, text: str) -> float:
+        """Calculate density of AI-specific patterns."""
+        text_lower = text.lower()
+        words = text_lower.split()
+        
+        if not words:
+            return 0.0
+        
+        # Count AI-specific patterns
+        pattern_count = 0
+        for pattern in self.ai_indicators["ai_specific_patterns"]:
+            pattern_count += text_lower.count(pattern)
+        
+        # Normalize by text length
+        return min(1.0, pattern_count / len(words) * 10)  # Scale factor for sensitivity
+    
     def detect_ai_content(self, text: str) -> Dict[str, any]:
-        """Enhanced AI content detection with reduced margin of error."""
+        """Multi-layer AI content detection with improved accuracy."""
         if not text.strip():
             return {
                 "is_ai_generated": False,
@@ -332,7 +362,8 @@ class AIContentDetector:
                     "formality": 0.0,
                     "sentence_variety": 0.0,
                     "semantic_coherence": 0.0,
-                    "lexical_diversity": 0.0
+                    "lexical_diversity": 0.0,
+                    "ai_pattern_density": 0.0
                 },
                 "analysis": "Empty text provided"
             }
@@ -344,18 +375,20 @@ class AIContentDetector:
         variety_score = self._calculate_advanced_sentence_variety(text)
         coherence_score = self._calculate_semantic_coherence(text)
         diversity_score = self._calculate_lexical_diversity(text)
+        pattern_density = self._calculate_ai_pattern_density(text)
         
         # Normalize perplexity (lower perplexity = more AI-like)
         normalized_perplexity = max(0.0, 1.0 - (perplexity_score / 100))
         
-        # Enhanced weighted confidence score with more factors
+        # Enhanced weighted confidence score with pattern density
         weights = {
-            "perplexity": 0.25,
-            "repetition": 0.20,
+            "perplexity": 0.20,
+            "repetition": 0.15,
             "formality": 0.20,
-            "sentence_variety": 0.15,
+            "sentence_variety": 0.10,
             "semantic_coherence": 0.10,
-            "lexical_diversity": 0.10
+            "lexical_diversity": 0.10,
+            "ai_pattern_density": 0.15  # New weight for pattern density
         }
         
         confidence = (
@@ -364,24 +397,43 @@ class AIContentDetector:
             formality_score * weights["formality"] +
             (1.0 - variety_score) * weights["sentence_variety"] +
             coherence_score * weights["semantic_coherence"] +
-            (1.0 - diversity_score) * weights["lexical_diversity"]
+            (1.0 - diversity_score) * weights["lexical_diversity"] +
+            pattern_density * weights["ai_pattern_density"]
         )
         
-        # Dynamic threshold based on text length - More conservative to reduce false positives
+        # Multi-layer threshold system
         text_length = len(text.split())
+        
+        # Base threshold
         if text_length < 20:
-            threshold = 0.75  # Much more lenient for short texts
+            base_threshold = 0.68
         elif text_length < 100:
-            threshold = 0.72
+            base_threshold = 0.65
         else:
-            threshold = 0.70  # Higher threshold for longer texts to reduce false positives
+            base_threshold = 0.63
+        
+        # Pattern density bonus (if high AI patterns, lower threshold)
+        if pattern_density > 0.3:
+            threshold = base_threshold - 0.05
+        elif pattern_density > 0.1:
+            threshold = base_threshold - 0.02
+        else:
+            threshold = base_threshold
+        
+        # Formality bonus (if very formal, lower threshold)
+        if formality_score > 0.6:
+            threshold -= 0.03
+        
+        # Repetition bonus (if very repetitive, lower threshold)
+        if repetition_score > 0.5:
+            threshold -= 0.02
         
         is_ai_generated = confidence > threshold
         
         # Generate enhanced analysis
         analysis = self._generate_enhanced_analysis(
             confidence, perplexity_score, repetition_score, 
-            formality_score, variety_score, coherence_score, diversity_score
+            formality_score, variety_score, coherence_score, diversity_score, pattern_density
         )
         
         return {
@@ -393,14 +445,15 @@ class AIContentDetector:
                 "formality": round(formality_score, 3),
                 "sentence_variety": round(variety_score, 3),
                 "semantic_coherence": round(coherence_score, 3),
-                "lexical_diversity": round(diversity_score, 3)
+                "lexical_diversity": round(diversity_score, 3),
+                "ai_pattern_density": round(pattern_density, 3)
             },
             "analysis": analysis
         }
     
     def _generate_enhanced_analysis(self, confidence: float, perplexity: float, 
                                    repetition: float, formality: float, variety: float,
-                                   coherence: float, diversity: float) -> str:
+                                   coherence: float, diversity: float, pattern_density: float) -> str:
         """Generate enhanced human-readable analysis."""
         
         if confidence > 0.90:
@@ -409,14 +462,19 @@ class AIContentDetector:
             level = "highly likely"
         elif confidence > 0.70:
             level = "likely"
-        elif confidence > 0.55:
+        elif confidence > 0.60:
             level = "possibly"
         else:
             level = "unlikely"
         
         analysis_parts = []
         
-        # Enhanced analysis with more specific indicators
+        # Enhanced analysis with pattern density
+        if pattern_density > 0.3:
+            analysis_parts.append("contains many AI-specific language patterns")
+        elif pattern_density > 0.1:
+            analysis_parts.append("shows some AI-specific patterns")
+        
         if formality > 0.75:
             analysis_parts.append("uses highly formal language and academic vocabulary")
         elif formality > 0.6:
