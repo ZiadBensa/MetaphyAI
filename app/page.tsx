@@ -1,12 +1,15 @@
 "use client"
 
 import { useState } from "react"
-import { FileText, Image as ImageIcon, Sparkles, FileSymlink, Menu, X, Download, Trash, UploadCloud } from "lucide-react"
+import { FileText, Image as ImageIcon, Sparkles, FileSymlink, Menu, X, Download, Trash, UploadCloud, Upload, Send, Loader2 } from "lucide-react"
 import AuthGuard from "@/components/auth/auth-guard"
 import TextExtractor from "@/components/text-extractor"
 import TextHumanizer from "@/components/text-humanizer"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Progress } from "@/components/ui/progress"
+import { Textarea } from "@/components/ui/textarea"
 import { useSession } from "next-auth/react"
 import UserMenu from "@/components/auth/user-menu"
 import React from "react"
@@ -83,90 +86,302 @@ function ResultsHistoryPanel({ history, onCopy, onClear, onClearAll }: {
 
 // Placeholder components for tools not yet implemented
 function PdfSummarizer({ droppedFileName, autoProcess }: { droppedFileName?: string, autoProcess?: boolean }) {
-  const [summaryLength, setSummaryLength] = useState("medium")
-  const [format, setFormat] = useState("paragraphs")
-  const [history, setHistory] = useState<Array<{ id: number; label: string; date: string; snippet: string; fullText: string }>>([])
-  const [result, setResult] = useState<string>("")
-  const [fileName, setFileName] = useState<string>(droppedFileName || "")
-  React.useEffect(() => { if (droppedFileName) setFileName(droppedFileName) }, [droppedFileName])
-  React.useEffect(() => { if (autoProcess && droppedFileName) handleSummarize() }, [autoProcess, droppedFileName])
-  function handleSummarize() {
-    const fakeSummary = `Summary for ${fileName || "example.pdf"} [${summaryLength}, ${format}]\nLorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.`
-    setResult(fakeSummary)
-    setHistory(prev => [
-      { id: Date.now(), label: fileName || "example.pdf", date: new Date().toLocaleString(), snippet: fakeSummary.slice(0, 100) + (fakeSummary.length > 100 ? "..." : ""), fullText: fakeSummary },
-      ...prev.slice(0, 9)
-    ])
-  }
-  function handleCopy(text: string) { navigator.clipboard.writeText(text) }
-  function handleClear(id: number) { setHistory(prev => prev.filter(item => item.id !== id)) }
-  function handleClearAll() { setHistory([]) }
+  const [file, setFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [pdfText, setPdfText] = useState<string>("");
+  const [chatMessages, setChatMessages] = useState<Array<{ role: "user" | "assistant"; content: string; timestamp: Date }>>([]);
+  const [currentMessage, setCurrentMessage] = useState("");
+  const [isSending, setIsSending] = useState(false);
+  const { toast } = useToast ? useToast() : { toast: () => {} };
+
+  React.useEffect(() => { 
+    if (droppedFileName) {
+      // Handle dropped file if needed
+      console.log('Dropped file:', droppedFileName);
+    }
+  }, [droppedFileName]);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile) {
+      if (selectedFile.type !== "application/pdf") {
+        toast({
+          title: "Invalid file type",
+          description: "Please select a PDF file.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setFile(selectedFile);
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!file) {
+      toast({
+        title: "No file selected",
+        description: "Please select a PDF file to upload.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadProgress(0);
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      // Simulate upload progress
+      const progressInterval = setInterval(() => {
+        setUploadProgress((prev) => {
+          if (prev >= 90) {
+            clearInterval(progressInterval);
+            return 90;
+          }
+          return prev + 10;
+        });
+      }, 100);
+
+      const response = await fetch("/api/pdf-summarizer/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      clearInterval(progressInterval);
+      setUploadProgress(100);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+        throw new Error(errorData.error || `Upload failed with status ${response.status}`);
+      }
+
+      const data = await response.json();
+      setPdfText(data.text);
+      
+      toast({
+        title: "PDF uploaded successfully",
+        description: `Extracted ${data.text.length} characters from the PDF.`,
+      });
+
+      // Add initial system message
+      setChatMessages([
+        {
+          role: "assistant",
+          content: `I've analyzed your PDF document. The document contains ${data.text.length} characters. You can now ask me questions about the content, request summaries, or discuss any specific aspects of the document.`,
+          timestamp: new Date(),
+        },
+      ]);
+
+    } catch (error) {
+      console.error("Upload error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+      toast({
+        title: "Upload failed",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(0);
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!currentMessage.trim() || !pdfText) return;
+
+    const userMessage = {
+      role: "user" as const,
+      content: currentMessage,
+      timestamp: new Date(),
+    };
+
+    setChatMessages((prev) => [...prev, userMessage]);
+    setCurrentMessage("");
+    setIsSending(true);
+
+    try {
+      const response = await fetch("/api/pdf-summarizer/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messages: [...chatMessages, userMessage],
+          pdf_context: pdfText,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to get response");
+      }
+
+      const data = await response.json();
+      
+      const assistantMessage = {
+        role: "assistant" as const,
+        content: data.response,
+        timestamp: new Date(),
+      };
+
+      setChatMessages((prev) => [...prev, assistantMessage]);
+    } catch (error) {
+      console.error("Chat error:", error);
+      toast({
+        title: "Error",
+        description: "Failed to get response. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
+
   return (
     <div className="p-8">
-      <h2 className="text-2xl font-bold mb-4">PDF Summarizer</h2>
-      <p className="mb-4 text-gray-600 dark:text-gray-300">Upload a PDF and get an AI-generated summary.</p>
-      <AdvancedOptionsPanel>
-        <div className="mb-4">
-          <label className="block font-medium mb-1">Summary Length</label>
-          <div className="flex gap-3">
-            {['short', 'medium', 'long'].map(opt => (
-              <label key={opt} className="flex items-center gap-1 cursor-pointer">
-                <input
-                  type="radio"
-                  name="summaryLength"
-                  value={opt}
-                  checked={summaryLength === opt}
-                  onChange={() => setSummaryLength(opt)}
-                  className="accent-blue-600"
-                />
-                <span className="capitalize">{opt}</span>
-              </label>
-            ))}
+      <h2 className="text-2xl font-bold mb-4">PDF Chat</h2>
+      <p className="mb-4 text-gray-600 dark:text-gray-300">Upload a PDF and chat with AI about its content</p>
+      
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Upload Section */}
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <Upload className="h-5 w-5" />
+            Upload PDF
+          </h3>
+          
+          <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+            <input
+              type="file"
+              accept=".pdf"
+              onChange={handleFileChange}
+              className="hidden"
+              id="pdf-upload"
+            />
+            <label
+              htmlFor="pdf-upload"
+              className="cursor-pointer flex flex-col items-center"
+            >
+              <FileText className="h-12 w-12 text-gray-400 mb-4" />
+              <span className="text-sm text-gray-600">
+                {file ? file.name : "Click to select a PDF file"}
+              </span>
+            </label>
+          </div>
+
+          {file && (
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary">{file.name}</Badge>
+              <span className="text-sm text-gray-500">
+                ({(file.size / 1024 / 1024).toFixed(2)} MB)
+              </span>
+            </div>
+          )}
+
+          {isUploading && (
+            <div className="space-y-2">
+              <Progress value={uploadProgress} className="w-full" />
+              <p className="text-sm text-gray-600">Uploading and processing PDF...</p>
+            </div>
+          )}
+
+          <Button
+            onClick={handleUpload}
+            disabled={!file || isUploading}
+            className="w-full"
+          >
+            {isUploading ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Processing...
+              </>
+            ) : (
+              <>
+                <Upload className="h-4 w-4 mr-2" />
+                Upload & Process
+              </>
+            )}
+          </Button>
+        </div>
+
+        {/* Chat Section */}
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold">Chat with PDF</h3>
+          
+          {/* Chat Messages */}
+          <div className="h-64 max-h-64 overflow-y-auto space-y-4 p-4 border rounded-lg bg-gray-50 dark:bg-gray-800">
+            {chatMessages.length === 0 ? (
+              <div className="text-center text-gray-500 mt-8">
+                <FileText className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                <p>Upload a PDF to start chatting about its content</p>
+              </div>
+            ) : (
+              chatMessages.map((message, index) => (
+                <div
+                  key={index}
+                  className={`flex ${
+                    message.role === "user" ? "justify-end" : "justify-start"
+                  }`}
+                >
+                  <div
+                    className={`max-w-[80%] p-3 rounded-lg ${
+                      message.role === "user"
+                        ? "bg-blue-600 text-white"
+                        : "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                    }`}
+                  >
+                    <p className="text-sm">{message.content}</p>
+                    <p className="text-xs opacity-70 mt-1">
+                      {message.timestamp.toLocaleTimeString()}
+                    </p>
+                  </div>
+                </div>
+              ))
+            )}
+            {isSending && (
+              <div className="flex justify-start">
+                <div className="bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 p-3 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span className="text-sm">AI is thinking...</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Message Input */}
+          <div className="flex gap-2">
+            <Textarea
+              value={currentMessage}
+              onChange={(e) => setCurrentMessage(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder="Ask a question about the PDF content..."
+              className="flex-1"
+              rows={2}
+              disabled={!pdfText || isSending}
+            />
+            <Button
+              onClick={handleSendMessage}
+              disabled={!currentMessage.trim() || !pdfText || isSending}
+              className="px-4"
+            >
+              <Send className="h-4 w-4" />
+            </Button>
           </div>
         </div>
-        <div>
-          <label className="block font-medium mb-1">Format</label>
-          <div className="flex gap-3">
-            {['paragraphs', 'bullets'].map(opt => (
-              <label key={opt} className="flex items-center gap-1 cursor-pointer">
-                <input
-                  type="radio"
-                  name="format"
-                  value={opt}
-                  checked={format === opt}
-                  onChange={() => setFormat(opt)}
-                  className="accent-blue-600"
-                />
-                <span className="capitalize">{opt === 'bullets' ? 'Bullet points' : 'Paragraphs'}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-      </AdvancedOptionsPanel>
-      {/* Simulated file input */}
-      <div className="mb-4 flex gap-2 items-center">
-        <input
-          type="text"
-          placeholder="File name (simulate upload)"
-          value={fileName}
-          onChange={e => setFileName(e.target.value)}
-          className="border rounded px-2 py-1 dark:bg-[#18181b] dark:border-gray-700"
-        />
-        <Button onClick={handleSummarize} type="button">Summarize</Button>
       </div>
-      {/* Main result */}
-      {result && (
-        <div className="mb-6 p-4 bg-slate-50 dark:bg-[#23232a] rounded border border-slate-200 dark:border-slate-700">
-          <div className="flex justify-between items-center mb-2">
-            <span className="font-semibold">Result</span>
-            <Button size="sm" variant="outline" onClick={() => handleCopy(result)}>Copy</Button>
-          </div>
-          <div className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">{result}</div>
-        </div>
-      )}
-      <ResultsHistoryPanel history={history} onCopy={handleCopy} onClear={handleClear} onClearAll={handleClearAll} />
     </div>
-  )
+  );
 }
 function TextExtractorWithOptions({ droppedFileName, autoProcess }: { droppedFileName?: string, autoProcess?: boolean }) {
   const [language, setLanguage] = useState("en")
@@ -369,7 +584,7 @@ const tools = [
 ]
 
 const toolDescriptions: Record<string, string> = {
-  pdf: "Upload a PDF file and get a concise, AI-generated summary. Choose summary length and format in advanced options.",
+  pdf: "Upload a PDF and chat with AI about its content. Ask questions, get summaries, and explore the document interactively.",
   extractor: "Extract text from images or scanned documents. Supports PDF, PNG, JPG, and more.",
   humanizer: "Paste or type AI-generated or formal text and convert it to natural, human-like writing.",
   converter: "Convert between PDF, Word, TXT, HTML, and Markdown formats. Batch processing supported.",

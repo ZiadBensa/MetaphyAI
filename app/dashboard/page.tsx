@@ -80,10 +80,17 @@ export default function DashboardPage() {
               </div>
 
               <div className="text-center text-gray-600 text-sm mt-8">
-                <p>
+                <p className="mb-4">
                   This is your personal dashboard. More features like interaction history and settings will be added
                   here.
                 </p>
+                <Button 
+                  onClick={() => window.location.href = '/tools'}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Access AI Tools
+                </Button>
               </div>
             </CardContent>
           </Card>
