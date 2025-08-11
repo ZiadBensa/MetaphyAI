@@ -19,7 +19,7 @@ class PDFSummarizer:
     def __init__(self, api_key: str):
         """Initialize the summarizer with Gemini API key."""
         genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel('gemini-pro')
+        self.model = genai.GenerativeModel('models/gemini-1.5-flash')
         
         # Define summary style prompts
         self.style_prompts = {
@@ -156,7 +156,14 @@ class PDFSummarizer:
             # Combine context with conversation history
             full_prompt = context_prompt + "\n\nConversation:\n"
             for msg in messages:
-                full_prompt += f"{msg['role'].title()}: {msg['content']}\n"
+                # Handle both dict and object formats
+                if isinstance(msg, dict):
+                    role = msg.get('role', 'user')
+                    content = msg.get('content', '')
+                else:
+                    role = getattr(msg, 'role', 'user')
+                    content = getattr(msg, 'content', '')
+                full_prompt += f"{role.title()}: {content}\n"
             
             full_prompt += "\nAssistant:"
             

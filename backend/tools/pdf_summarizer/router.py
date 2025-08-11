@@ -164,8 +164,20 @@ async def chat_about_pdf(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Chat generation failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to generate chat response: {str(e)}")
+        error_msg = str(e)
+        logger.error(f"Chat generation failed: {error_msg}")
+        
+        # Check for specific error types and return appropriate status codes
+        if "quota" in error_msg.lower() or "429" in error_msg:
+            raise HTTPException(status_code=429, detail="API quota exceeded. Please wait a few minutes or check your billing plan.")
+        elif "rate limit" in error_msg.lower():
+            raise HTTPException(status_code=429, detail="Rate limit exceeded. Please wait before making another request.")
+        elif "model" in error_msg.lower() and "not found" in error_msg.lower():
+            raise HTTPException(status_code=503, detail="AI model not available. Please check the model configuration.")
+        elif "api key" in error_msg.lower():
+            raise HTTPException(status_code=401, detail="Invalid API key. Please check your Gemini API configuration.")
+        else:
+            raise HTTPException(status_code=500, detail=f"Failed to generate chat response: {error_msg}")
 
 
 @router.post("/key-points")
@@ -284,4 +296,41 @@ async def health_check():
             "Question generation"
         ]
     }
+
+@router.get("/debug")
+async def debug_info():
+    """Debug endpoint to check API configuration."""
+    try:
+        import os
+        import google.generativeai as genai
+        
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            return {
+                "status": "error",
+                "message": "GEMINI_API_KEY not found in environment variables",
+                "api_key_configured": False
+            }
+        
+        # Test API connection
+        genai.configure(api_key=api_key)
+        models = genai.list_models()
+        available_models = [model.name for model in models if "gemini" in model.name.lower()]
+        
+        return {
+            "status": "healthy",
+            "message": "API configuration check completed",
+            "api_key_configured": True,
+            "api_key_length": len(api_key) if api_key else 0,
+            "available_gemini_models": available_models,
+            "current_model": "gemini-1.5-pro",
+            "model_available": "gemini-1.5-pro" in available_models
+        }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Debug check failed: {str(e)}",
+            "api_key_configured": False
+        }
 
