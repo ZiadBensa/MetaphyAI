@@ -1,6 +1,6 @@
-# AI Text Tools - Text Humanization & AI Detection
+# AI Tools Platform - Text Humanization, PDF Summarization & Image Generation
 
-A modern web application for detecting AI-generated content and humanizing text using advanced AI models.
+A comprehensive web application featuring AI-powered text humanization, PDF summarization, and local image generation using Stable Diffusion.
 
 ## 🚀 Features
 
@@ -14,13 +14,27 @@ A modern web application for detecting AI-generated content and humanizing text 
 - **Hugging Face Models**: Fallback detection using pre-trained models
 - **Comprehensive Scoring**: Perplexity, repetition, formality, and more
 
+### PDF Summarization
+- **AI-powered Summarization**: Intelligent text summarization using advanced models
+- **Key Points Extraction**: Automatic extraction of important points
+- **Question Generation**: Generate questions from PDF content
+- **Chat Interface**: Interactive chat with PDF content
+
+### Image Generation
+- **Local Stable Diffusion**: CPU-based image generation (no API costs)
+- **Multiple Styles**: Realistic, Artistic, Abstract, Cartoon, Anime, and more
+- **Custom Prompts**: Full control over image generation
+- **High Quality**: Professional-grade image output
+
 ## 🛠️ Tech Stack
 
 ### Backend
 - **FastAPI**: Modern Python web framework
 - **Gemini AI**: Google's advanced language model
+- **Stable Diffusion**: Local image generation with diffusers
 - **NLTK**: Natural language processing
 - **Pydantic**: Data validation
+- **PyTorch**: Deep learning framework
 
 ### Frontend
 - **Next.js 14**: React framework with App Router
@@ -33,12 +47,13 @@ A modern web application for detecting AI-generated content and humanizing text 
 ### Prerequisites
 - Node.js 18+ 
 - Python 3.8+
-- Gemini API key
+- Gemini API key (for text humanization)
 
 ### Backend Setup
 ```bash
 cd backend
 pip install -r requirements.txt
+python install_deps.py  # Install additional dependencies for image generation
 ```
 
 ### Frontend Setup
@@ -50,6 +65,7 @@ npm install
 Create `backend/config.env`:
 ```env
 GEMINI_API_KEY=your_gemini_api_key_here
+HUGGINGFACE_API_TOKEN=your_hf_token_here  # Optional for local image generation
 ```
 
 ## 🚀 Running the Application
@@ -79,36 +95,52 @@ App runs on `http://localhost:3000`
   - Body: `{"text": "your text"}`
   - Returns: AI detection analysis
 
+### PDF Summarization
+- `POST /pdf-summarizer/upload` - Upload PDF file
+- `POST /pdf-summarizer/summarize` - Generate summary
+- `POST /pdf-summarizer/key-points` - Extract key points
+- `POST /pdf-summarizer/questions` - Generate questions
+- `POST /pdf-summarizer/chat` - Chat with PDF content
+
+### Image Generation
+- `POST /image-generator/generate` - Generate images
+- `GET /image-generator/models` - Get available models
+- `GET /image-generator/styles` - Get available styles
+- `GET /image-generator/health` - Health check
+
 ### Health Check
 - `GET /health`
 - `GET /text-humanizer/health`
+- `GET /pdf-summarizer/health`
+- `GET /image-generator/health`
 
 ## 🎯 Usage
 
-1. **AI Detection**: Paste text to detect if it's AI-generated
-2. **Text Humanization**: Transform AI-generated text to sound more natural
-3. **Model Selection**: Choose between Gemini AI, Semantic Enhanced, or Basic Regex
-4. **Real-time Analysis**: Get instant feedback with processing times
+1. **Text Humanization**: Transform AI-generated text to sound more natural
+2. **AI Detection**: Paste text to detect if it's AI-generated
+3. **PDF Summarization**: Upload PDFs and get intelligent summaries
+4. **Image Generation**: Create stunning images with local Stable Diffusion
 
-## 🔍 Models
+## 🎨 Image Generation Features
 
-### Gemini AI (Advanced)
-- Uses Google's Gemini 2.5 Flash model
-- Sophisticated text restructuring
-- Maintains meaning while changing words
-- Best for complex transformations
+### Available Styles
+- **Realistic**: High-quality, photorealistic images
+- **Artistic**: Creative, artistic interpretations
+- **Abstract**: Modern, abstract designs
+- **Cartoon**: Fun, animated style
+- **Anime**: Japanese animation style
+- **Photographic**: Professional photography style
+- **Painting**: Oil painting aesthetic
+- **Digital Art**: Digital illustration style
+- **Sketch**: Pencil drawing style
+- **Watercolor**: Soft, watercolor painting style
+- **Custom**: Clean, minimal designs (perfect for logos)
 
-### Semantic Enhanced
-- Rule-based with semantic analysis
-- Context-aware word replacement
-- Fast and reliable
-- Good for simple to moderate transformations
-
-### Basic Regex
-- Simple pattern matching
-- Fastest processing
-- Basic word replacement
-- Good for quick transformations
+### Generation Settings
+- **Inference Steps**: 10-100 (higher = better quality, slower generation)
+- **Guidance Scale**: 1.0-20.0 (controls creativity vs. prompt adherence)
+- **Aspect Ratios**: Square, Landscape, Portrait, Wide, Ultrawide
+- **Generation Time**: ~7-8 minutes per image (CPU-based)
 
 ## 📊 AI Detection Features
 

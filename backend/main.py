@@ -14,6 +14,7 @@ from core.config import settings
 from core.dependencies import get_logger
 from tools.text_humanizer.router import router as text_humanizer_router
 from tools.pdf_summarizer.router import router as pdf_summarizer_router
+from tools.image_generator.router import router as image_generator_router
 
 logger = get_logger(__name__)
 
@@ -30,6 +31,10 @@ async def lifespan(app: FastAPI):
     logger.info("   ✅ PDF text extraction system ready!")
     logger.info("   ✅ AI-powered summarization system ready!")
     logger.info("   ✅ PDF chat interface ready!")
+    logger.info("🎨 Loading image generation systems...")
+    logger.info("   ✅ Local CPU-based Stable Diffusion ready!")
+    logger.info("   ✅ Local model loading in progress...")
+    logger.info("   ✅ Multiple style support ready!")
     
     logger.info(f"🌐 Backend will be available at: http://{settings.HOST}:{settings.PORT}")
     logger.info(f"📚 API documentation at: http://{settings.HOST}:{settings.PORT}/docs")
@@ -59,6 +64,7 @@ app.add_middleware(
 # Include routers
 app.include_router(text_humanizer_router)
 app.include_router(pdf_summarizer_router)
+app.include_router(image_generator_router)
 
 @app.get("/")
 async def root():
@@ -67,7 +73,7 @@ async def root():
         "message": "AI Tools Backend",
         "version": settings.VERSION,
         "docs": "/docs",
-        "tools": ["text-humanizer", "pdf-summarizer"]
+        "tools": ["text-humanizer", "pdf-summarizer", "image-generator"]
     }
 
 @app.get("/health")

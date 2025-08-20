@@ -1,10 +1,11 @@
 "use client"
 
 import { useState } from "react"
-import { FileText, Image as ImageIcon, Sparkles, FileSymlink, Menu, X, Download, Trash, UploadCloud, Upload, Send, Loader2 } from "lucide-react"
+import { FileText, Image as ImageIcon, Sparkles, FileSymlink, Menu, X, Download, Trash, UploadCloud, Upload, Send, Loader2, Wand2 } from "lucide-react"
 import AuthGuard from "@/components/auth/auth-guard"
 import TextExtractor from "@/components/text-extractor"
 import TextHumanizer from "@/components/text-humanizer"
+
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -25,6 +26,10 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
 } from "@/components/ui/alert-dialog"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Slider } from "@/components/ui/slider"
 
 // AdvancedOptionsPanel component
 function AdvancedOptionsPanel({ children, label = "Advanced Options" }: { children: React.ReactNode; label?: string }) {
@@ -556,6 +561,535 @@ function DocumentConverterWithOptions() {
   )
 }
 
+// Image Generator component following the same pattern as PDF chat
+function ImageGenerator({ droppedFileName, autoProcess }: { droppedFileName?: string, autoProcess?: boolean }) {
+  const [prompt, setPrompt] = useState<string>("");
+  const [negativePrompt, setNegativePrompt] = useState<string>("");
+  const [selectedStyle, setSelectedStyle] = useState<string>("realistic");
+  const [selectedModel, setSelectedModel] = useState<string>("local-stable-diffusion");
+  const [aspectRatio, setAspectRatio] = useState<string>("1:1");
+  const [numImages, setNumImages] = useState<number>(1);
+  const [guidanceScale, setGuidanceScale] = useState<number>(7.5);
+  const [inferenceSteps, setInferenceSteps] = useState<number>(20);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generatedImages, setGeneratedImages] = useState<Array<{ id: string; url: string; prompt: string; model: string; timestamp: Date }>>([]);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [apiStatus, setApiStatus] = useState<any>(null);
+  const [isCheckingStatus, setIsCheckingStatus] = useState(false);
+  const { toast } = useToast ? useToast() : { toast: () => {} };
+
+  React.useEffect(() => { 
+    if (droppedFileName) {
+      // Handle dropped file if needed
+      console.log('Dropped file:', droppedFileName);
+    }
+  }, [droppedFileName]);
+
+  const checkApiStatus = async () => {
+    setIsCheckingStatus(true);
+    try {
+      const response = await fetch("http://localhost:8000/image-generator/health");
+      const data = await response.json();
+      setApiStatus(data);
+      
+      if (data.status === "healthy") {
+        toast({
+          title: "Local Model Status: Healthy",
+          description: "Your local Stable Diffusion model is ready for generation.",
+        });
+      } else if (data.status === "not_loaded") {
+        toast({
+          title: "Model Not Loaded",
+          description: "Local model is still loading. Please wait a moment.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Model Status: Error",
+          description: "Local model encountered an error. Please restart the backend.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Status Check Failed",
+        description: "Failed to check local model status. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCheckingStatus(false);
+    }
+  };
+
+  const handleGenerate = async () => {
+    if (!prompt.trim()) {
+      toast({
+        title: "No prompt entered",
+        description: "Please enter a prompt for image generation.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsGenerating(true);
+
+    try {
+              const requestBody = {
+          prompt: prompt.trim(),
+          negative_prompt: negativePrompt.trim(),
+          style: selectedStyle,
+          aspect_ratio: aspectRatio,
+          model: selectedModel,
+          num_images: numImages,
+          guidance_scale: guidanceScale,
+          num_inference_steps: inferenceSteps,
+        };
+        
+        console.log("Sending request to backend:", JSON.stringify(requestBody, null, 2));
+
+              const response = await fetch("http://localhost:8000/image-generator/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+        console.error("Backend error response:", JSON.stringify(errorData, null, 2));
+        
+        // Handle validation errors more specifically
+        if (response.status === 422 && errorData.detail) {
+          const validationErrors = Array.isArray(errorData.detail) ? errorData.detail : [errorData.detail];
+          const errorMessages = validationErrors.map((err: any) => 
+            `${err.loc?.join('.') || 'field'}: ${err.msg || err.message || 'validation error'}`
+          ).join(', ');
+          throw new Error(`Validation error: ${errorMessages}`);
+        }
+        
+        throw new Error(errorData.error || errorData.detail || `Generation failed with status ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      // Check if the response contains an error
+      if (data.error) {
+        throw new Error(data.error);
+      }
+      
+      // Check if images array exists
+      if (!data.images || !Array.isArray(data.images)) {
+        throw new Error('Invalid response format: no images array');
+      }
+      
+      // Add generated images to the list
+      const newImages = data.images.map((image: any, index: number) => ({
+        id: `img-${Date.now()}-${index}`,
+        url: image.image_url,
+        prompt: image.prompt,
+        model: image.model,
+        timestamp: new Date(),
+      }));
+      
+      setGeneratedImages(prev => [...newImages, ...prev]);
+
+      toast({
+        title: "Images generated successfully",
+        description: `Generated ${data.total_images} image(s) in ${data.processing_time.toFixed(1)}s`,
+      });
+
+    } catch (error: any) {
+      console.error("Generation error:", error);
+      
+      // Handle specific error cases
+      let errorMessage = error.message || "Failed to generate images. Please try again.";
+      let errorTitle = "Generation failed";
+      
+      if (error.message && error.message.includes("Model not loaded")) {
+        errorTitle = "Model Not Ready";
+        errorMessage = "Local model is still loading. Please wait a moment and try again.";
+      } else if (error.message && error.message.includes("memory")) {
+        errorTitle = "Memory Issue";
+        errorMessage = "Not enough memory to generate images. Try reducing image size or inference steps.";
+      } else if (error.message && error.message.includes("timeout")) {
+        errorTitle = "Generation Timeout";
+        errorMessage = "Image generation took too long. Try reducing inference steps or image size.";
+      }
+      
+      toast({
+        title: errorTitle,
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleDownload = async (imageUrl: string, prompt: string) => {
+    try {
+      const response = await fetch(imageUrl);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `generated-image-${Date.now()}.png`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      toast({
+        title: "Downloaded!",
+        description: "Image saved to your downloads folder",
+      });
+    } catch (error) {
+      toast({
+        title: "Download failed",
+        description: "Failed to download image",
+        variant: "destructive",
+      });
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
+            <span className="text-white text-lg">🎨</span>
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold">AI Image Generator</h2>
+            <p className="text-gray-600 dark:text-gray-300">
+              Create stunning images with AI using local Stable Diffusion (CPU-based)
+            </p>
+          </div>
+        </div>
+        
+        {/* API Status Check */}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={checkApiStatus}
+            disabled={isCheckingStatus}
+          >
+            {isCheckingStatus ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Checking...
+              </>
+            ) : (
+              <>
+                          <span className="mr-2">🔍</span>
+          Check Model Status
+              </>
+            )}
+          </Button>
+          
+          {apiStatus && (
+            <div className={`px-2 py-1 rounded text-xs font-medium ${
+              apiStatus.status === "healthy" 
+                ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                : apiStatus.status === "not_loaded"
+                ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
+                : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
+            }`}>
+              {apiStatus.status === "healthy" ? "✅ Model Ready" : 
+               apiStatus.status === "not_loaded" ? "⏳ Loading" :
+               "❌ Error"}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="flex flex-1 gap-6 min-h-0">
+        {/* Left Panel - Generation Controls */}
+        <div className="w-1/2 space-y-6">
+          {/* Local Model Status Warning */}
+          {apiStatus && apiStatus.status === "not_loaded" && (
+            <Card className="border-yellow-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-900/20">
+              <CardHeader>
+                <CardTitle className="text-yellow-800 dark:text-yellow-200 flex items-center gap-2">
+                  <span>⏳</span>
+                  Model Loading
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-yellow-700 dark:text-yellow-300 text-sm">
+                  The local Stable Diffusion model is still loading. This may take a few minutes on first startup.
+                </p>
+                <ul className="text-sm text-yellow-700 dark:text-yellow-300 space-y-1">
+                  <li>• <strong>First Time:</strong> Model downloads ~4GB on first run</li>
+                  <li>• <strong>Loading:</strong> Model loads into memory (2-3 minutes)</li>
+                  <li>• <strong>CPU Generation:</strong> Images will be generated locally</li>
+                </ul>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={checkApiStatus}
+                  >
+                    Check Status
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Generation Settings</CardTitle>
+              <CardDescription>Configure your image generation parameters</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Prompt Input */}
+              <div className="space-y-2">
+                <Label htmlFor="prompt">Prompt</Label>
+                <Textarea
+                  id="prompt"
+                  placeholder="Describe the image you want to generate..."
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  rows={3}
+                  className="resize-none"
+                />
+                {selectedStyle === "custom" && (
+                  <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
+                    <p>💡 <strong>Custom style</strong> - Optimized for logos, icons, and clean designs</p>
+                    <p>🎯 <strong>Perfect for:</strong> Company logos, app icons, simple graphics, technical diagrams</p>
+                    <p>📝 <strong>Example:</strong> "simple gear icon, minimal design, flat style, white background"</p>
+                    <p>💪 <strong>Tips:</strong> Be specific about colors, style, and background. Use terms like "minimal", "clean", "professional"</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Negative Prompt */}
+              <div className="space-y-2">
+                <Label htmlFor="negative-prompt">Negative Prompt (Optional)</Label>
+                <Textarea
+                  id="negative-prompt"
+                  placeholder="What to avoid in the image..."
+                  value={negativePrompt}
+                  onChange={(e) => setNegativePrompt(e.target.value)}
+                  rows={2}
+                  className="resize-none"
+                />
+                {selectedStyle === "custom" && (
+                  <p className="text-xs text-gray-500">
+                    💡 For logos: Try "text, words, letters, complex background, noise, blurry, low quality"
+                  </p>
+                )}
+              </div>
+
+              {/* Style Selection */}
+              <div className="space-y-2">
+                <Label>Style (Current: {selectedStyle})</Label>
+                <Select value={selectedStyle} onValueChange={setSelectedStyle}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select style" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="realistic">Realistic</SelectItem>
+                    <SelectItem value="artistic">Artistic</SelectItem>
+                    <SelectItem value="abstract">Abstract</SelectItem>
+                    <SelectItem value="cartoon">Cartoon</SelectItem>
+                    <SelectItem value="anime">Anime</SelectItem>
+                    <SelectItem value="photographic">Photographic</SelectItem>
+                    <SelectItem value="painting">Painting</SelectItem>
+                    <SelectItem value="digital_art">Digital Art</SelectItem>
+                    <SelectItem value="sketch">Sketch</SelectItem>
+                    <SelectItem value="watercolor">Watercolor</SelectItem>
+                    <SelectItem value="custom">Custom (Logo & Icon Optimized)</SelectItem>
+                  </SelectContent>
+                </Select>
+                {selectedStyle === "custom" && (
+                  <p className="text-xs text-blue-600 dark:text-blue-400">
+                    💡 Custom style is optimized for logos, icons, and clean designs. It adds minimal style enhancement to preserve the original design intent.
+                  </p>
+                )}
+              </div>
+
+              {/* Model Selection */}
+              <div className="space-y-2">
+                <Label>Model</Label>
+                <Select value={selectedModel} onValueChange={setSelectedModel}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select model" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="local-stable-diffusion">Local Stable Diffusion (CPU)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-gray-600 dark:text-gray-400">
+                  💻 Running locally on your CPU - no external API needed
+                </p>
+              </div>
+
+              {/* Basic Settings */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Aspect Ratio</Label>
+                  <Select value={aspectRatio} onValueChange={setAspectRatio}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1:1">Square (1:1)</SelectItem>
+                      <SelectItem value="16:9">Landscape (16:9)</SelectItem>
+                      <SelectItem value="9:16">Portrait (9:16)</SelectItem>
+                      <SelectItem value="4:3">Wide (4:3)</SelectItem>
+                      <SelectItem value="21:9">Ultrawide (21:9)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Number of Images</Label>
+                  <Select value={numImages.toString()} onValueChange={(value) => setNumImages(parseInt(value))}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">1 Image</SelectItem>
+                      <SelectItem value="2">2 Images</SelectItem>
+                      <SelectItem value="3">3 Images</SelectItem>
+                      <SelectItem value="4">4 Images</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Advanced Settings Toggle */}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAdvanced(!showAdvanced)}
+                className="w-full"
+              >
+                {showAdvanced ? "Hide" : "Show"} Advanced Settings
+              </Button>
+
+              {/* Advanced Settings */}
+              {showAdvanced && (
+                <div className="space-y-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <div className="space-y-2">
+                    <Label>Guidance Scale: {guidanceScale}</Label>
+                    <Slider
+                      value={[guidanceScale]}
+                      onValueChange={(value) => setGuidanceScale(value[0])}
+                      max={20}
+                      min={1}
+                      step={0.5}
+                      className="w-full"
+                    />
+                    <p className="text-xs text-gray-500">
+                      Controls how closely the image follows the prompt (1-20)
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Inference Steps: {inferenceSteps}</Label>
+                    <Slider
+                      value={[inferenceSteps]}
+                      onValueChange={(value) => setInferenceSteps(value[0])}
+                      max={100}
+                      min={10}
+                      step={5}
+                      className="w-full"
+                    />
+                    <p className="text-xs text-gray-500">
+                      More steps = higher quality but slower generation (10-100). CPU generation takes 2-5 minutes.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Generate Button */}
+              <Button
+                onClick={handleGenerate}
+                disabled={isGenerating || !prompt.trim() || (apiStatus && apiStatus.status === "not_loaded")}
+                className="w-full"
+                size="lg"
+              >
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Generating...
+                  </>
+                ) : apiStatus && apiStatus.status === "not_loaded" ? (
+                  <>
+                    <span className="mr-2">⏳</span>
+                    Model Loading
+                  </>
+                ) : (
+                  <>
+                    <span className="mr-2">🎨</span>
+                    Generate Images
+                  </>
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right Panel - Generated Images */}
+        <div className="w-1/2 space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Generated Images</CardTitle>
+              <CardDescription>Your AI-generated images will appear here</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {generatedImages.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  <span className="text-4xl mb-4 block">🎨</span>
+                  <p>No images generated yet</p>
+                  <p className="text-sm">Enter a prompt and click generate to create your first image</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {generatedImages.map((image) => (
+                    <div key={image.id} className="space-y-2">
+                      <div className="relative group">
+                        <img
+                          src={image.url}
+                          alt={`Generated image: ${image.prompt}`}
+                          className="w-full h-48 object-cover rounded-lg border"
+                        />
+                        <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all duration-200 rounded-lg flex items-center justify-center">
+                          <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex gap-2">
+                            <Button
+                              size="sm"
+                              onClick={() => handleDownload(image.url, image.prompt)}
+                              className="bg-white text-black hover:bg-gray-100"
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        <p className="truncate">{image.prompt}</p>
+                        <p>Model: {image.model.split('/').pop()}</p>
+                        <p>Generated: {image.timestamp.toLocaleTimeString()}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const tools = [
   {
     key: "pdf",
@@ -581,6 +1115,12 @@ const tools = [
     icon: <FileSymlink className="h-5 w-5" />,
     component: <DocumentConverterWithOptions />,
   },
+  {
+    key: "generator",
+    name: "Image Generator",
+    icon: <Wand2 className="h-5 w-5" />,
+    component: <ImageGenerator />,
+  },
 ]
 
 const toolDescriptions: Record<string, string> = {
@@ -588,6 +1128,7 @@ const toolDescriptions: Record<string, string> = {
   extractor: "Extract text from images or scanned documents. Supports PDF, PNG, JPG, and more.",
   humanizer: "Paste or type AI-generated or formal text and convert it to natural, human-like writing.",
   converter: "Convert between PDF, Word, TXT, HTML, and Markdown formats. Batch processing supported.",
+          generator: "Create stunning images with AI using Hugging Face's Stable Diffusion models. Multiple styles and models available.",
 }
 
 export default function Home() {
@@ -731,6 +1272,7 @@ export default function Home() {
     if (toolKey === "extractor") return <TextExtractorWithOptions droppedFileName={droppedFile?.tool === "extractor" ? droppedFile.fileName : undefined} autoProcess={!!droppedFile?.file && droppedFile.tool === "extractor"} />
     if (toolKey === "humanizer") return <TextHumanizer />
     if (toolKey === "converter") return <DocumentConverterWithOptions />
+    if (toolKey === "generator") return <ImageGenerator droppedFileName={droppedFile?.tool === "generator" ? droppedFile.fileName : undefined} autoProcess={!!droppedFile?.file && droppedFile.tool === "generator"} />
     return null
   }
 
