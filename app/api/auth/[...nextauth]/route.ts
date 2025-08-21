@@ -57,6 +57,18 @@ export const authOptions: NextAuthOptions = {
           // Optionally, throw an error to prevent sign-in if database operation fails
           // throw new Error("Failed to link account with application database.")
         }
+      } else if (token.email && !token.userId) {
+        // If we have an email but no userId, try to find the user
+        try {
+          const existingUser = await prisma.user.findUnique({
+            where: { email: token.email as string },
+          })
+          if (existingUser) {
+            token.userId = existingUser.id
+          }
+        } catch (error) {
+          console.error("Failed to find user by email:", error)
+        }
       }
       return token
     },
@@ -78,4 +90,12 @@ export const authOptions: NextAuthOptions = {
 
 const handler = NextAuth(authOptions)
 
-export { handler as GET, handler as POST }
+export async function GET(request: Request, context: { params: Promise<{ nextauth: string[] }> }) {
+  const { params } = await context
+  return handler(request, { params })
+}
+
+export async function POST(request: Request, context: { params: Promise<{ nextauth: string[] }> }) {
+  const { params } = await context
+  return handler(request, { params })
+}

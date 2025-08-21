@@ -1,9 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { FileText, Image as ImageIcon, Sparkles, FileSymlink, Menu, X, Download, Trash, UploadCloud, Upload, Send, Loader2, Wand2 } from "lucide-react"
+import { FileText, Menu, X, Download, Trash, UploadCloud, Upload, Send, Loader2, ChevronDown, ChevronUp, History, Clock } from "lucide-react"
 import AuthGuard from "@/components/auth/auth-guard"
-import TextExtractor from "@/components/text-extractor"
 import TextHumanizer from "@/components/text-humanizer"
 
 import Image from "next/image"
@@ -11,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Textarea } from "@/components/ui/textarea"
-import { useSession } from "next-auth/react"
+import { useSession, signIn } from "next-auth/react"
 import UserMenu from "@/components/auth/user-menu"
 import React from "react"
 import { useToast } from "@/hooks/use-toast"
@@ -98,7 +97,28 @@ function PdfSummarizer({ droppedFileName, autoProcess }: { droppedFileName?: str
   const [chatMessages, setChatMessages] = useState<Array<{ role: "user" | "assistant"; content: string; timestamp: Date }>>([]);
   const [currentMessage, setCurrentMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [isUploadCollapsed, setIsUploadCollapsed] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [chatHistory, setChatHistory] = useState<Array<any>>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const { toast } = useToast ? useToast() : { toast: () => {} };
+
+  // Function to refresh session
+  const refreshSession = async () => {
+    try {
+      console.log('Refreshing session...');
+      const response = await fetch('/api/auth/session');
+      if (response.ok) {
+        const sessionData = await response.json();
+        console.log('Session refreshed:', sessionData);
+        return sessionData;
+      }
+    } catch (error) {
+      console.error('Error refreshing session:', error);
+    }
+    return null;
+  };
 
   React.useEffect(() => { 
     if (droppedFileName) {
@@ -106,6 +126,105 @@ function PdfSummarizer({ droppedFileName, autoProcess }: { droppedFileName?: str
       console.log('Dropped file:', droppedFileName);
     }
   }, [droppedFileName]);
+
+  // Load chat history
+  const loadChatHistory = async () => {
+    try {
+      setIsLoadingHistory(true);
+      console.log('Loading chat history...');
+      const response = await fetch('/api/chat-history');
+      console.log('History response status:', response.status);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Chat history data:', data);
+        setChatHistory(data.sessions || []);
+      } else {
+        const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+        console.error('Failed to load chat history:', errorData);
+      }
+    } catch (error) {
+      console.error('Error loading chat history:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load chat history",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  // Generate 6-word summary
+  const generateSummary = (text: string): string => {
+    const words = text.split(/\s+/).filter(word => word.length > 0);
+    return words.slice(0, 6).join(' ').replace(/[^\w\s]/g, '');
+  };
+
+  // Load a specific chat session
+  const loadChatSession = async (sessionId: string) => {
+    try {
+      const response = await fetch(`/api/chat-history/${sessionId}`);
+      if (response.ok) {
+        const data = await response.json();
+        const session = data.session;
+        
+        setPdfText(session.pdfText);
+        setCurrentSessionId(session.id);
+        setChatMessages(session.messages.map((msg: any) => ({
+          role: msg.role,
+          content: msg.content,
+          timestamp: new Date(msg.timestamp)
+        })));
+        
+        // Set file info for display
+        setFile(new File([], session.pdfFileName));
+        setIsUploadCollapsed(true);
+        
+        toast({
+          title: "Chat loaded",
+          description: `Loaded chat session for ${session.pdfFileName}`,
+        });
+      }
+    } catch (error) {
+      console.error('Error loading chat session:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load chat session",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Delete a chat session
+  const deleteChatSession = async (sessionId: string) => {
+    try {
+      const response = await fetch(`/api/chat-history/${sessionId}`, {
+        method: 'DELETE'
+      });
+      if (response.ok) {
+        setChatHistory(prev => prev.filter(session => session.id !== sessionId));
+        if (currentSessionId === sessionId) {
+          // Clear current session if it was deleted
+          setPdfText("");
+          setChatMessages([]);
+          setCurrentSessionId(null);
+          setFile(null);
+        }
+        toast({
+          title: "Session deleted",
+          description: "Chat session has been deleted",
+        });
+      }
+    } catch (error) {
+      console.error('Error deleting chat session:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete chat session",
+        variant: "destructive",
+      });
+    }
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -166,19 +285,83 @@ function PdfSummarizer({ droppedFileName, autoProcess }: { droppedFileName?: str
       const data = await response.json();
       setPdfText(data.text);
       
+      // Create chat session
+      const summary = generateSummary(data.text);
+      console.log('Creating chat session with summary:', summary);
+      
+      // Refresh session to ensure we have the latest userId
+      await refreshSession();
+      
+      const sessionResponse = await fetch('/api/chat-history', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          pdfFileName: file.name,
+          pdfText: data.text,
+          summary: summary
+        }),
+      });
+
+      console.log('Session response status:', sessionResponse.status);
+      
+      let sessionId = null;
+      if (sessionResponse.ok) {
+        const sessionData = await sessionResponse.json();
+        sessionId = sessionData.session.id;
+        setCurrentSessionId(sessionId);
+        console.log('Session created with ID:', sessionId);
+      } else {
+        const errorData = await sessionResponse.json().catch(() => ({ error: "Unknown error" }));
+        console.error('Failed to create session:', errorData);
+      }
+      
       toast({
         title: "PDF uploaded successfully",
         description: `Extracted ${data.text.length} characters from the PDF.`,
       });
 
       // Add initial system message
-      setChatMessages([
-        {
-          role: "assistant",
-          content: `I've analyzed your PDF document. The document contains ${data.text.length} characters. You can now ask me questions about the content, request summaries, or discuss any specific aspects of the document.`,
-          timestamp: new Date(),
-        },
-      ]);
+      const initialMessage = {
+        role: "assistant" as const,
+        content: `PDF loaded successfully. The document contains ${data.text.length} characters. You can now ask questions about the content.`,
+        timestamp: new Date(),
+      };
+      
+      setChatMessages([initialMessage]);
+
+      // Save initial message to database using the just-created sessionId
+      if (sessionId) {
+        try {
+          console.log('Saving initial message to session:', sessionId);
+          const messageResponse = await fetch('/api/chat-history/messages', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              sessionId: sessionId,
+              role: initialMessage.role,
+              content: initialMessage.content
+            }),
+          });
+          
+          if (messageResponse.ok) {
+            console.log('Initial message saved successfully');
+          } else {
+            const errorData = await messageResponse.json().catch(() => ({ error: "Unknown error" }));
+            console.error('Failed to save initial message:', errorData);
+          }
+        } catch (error) {
+          console.error('Error saving initial message:', error);
+        }
+      } else {
+        console.error('No session ID available to save initial message');
+      }
+
+      // Collapse the upload section after successful upload
+      setIsUploadCollapsed(true);
 
     } catch (error) {
       console.error("Upload error:", error);
@@ -207,6 +390,35 @@ function PdfSummarizer({ droppedFileName, autoProcess }: { droppedFileName?: str
     setCurrentMessage("");
     setIsSending(true);
 
+    // Save user message to database
+    if (currentSessionId) {
+      try {
+        console.log('Saving user message to session:', currentSessionId);
+        const userMessageResponse = await fetch('/api/chat-history/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            sessionId: currentSessionId,
+            role: userMessage.role,
+            content: userMessage.content
+          }),
+        });
+        
+        if (userMessageResponse.ok) {
+          console.log('User message saved successfully');
+        } else {
+          const errorData = await userMessageResponse.json().catch(() => ({ error: "Unknown error" }));
+          console.error('Failed to save user message:', errorData);
+        }
+      } catch (error) {
+        console.error('Error saving user message:', error);
+      }
+    } else {
+      console.error('No current session ID available to save user message');
+    }
+
     try {
       const response = await fetch("/api/pdf-summarizer/chat", {
         method: "POST",
@@ -232,6 +444,35 @@ function PdfSummarizer({ droppedFileName, autoProcess }: { droppedFileName?: str
       };
 
       setChatMessages((prev) => [...prev, assistantMessage]);
+
+      // Save assistant message to database
+      if (currentSessionId) {
+        try {
+          console.log('Saving assistant message to session:', currentSessionId);
+          const assistantMessageResponse = await fetch('/api/chat-history/messages', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              sessionId: currentSessionId,
+              role: assistantMessage.role,
+              content: assistantMessage.content
+            }),
+          });
+          
+          if (assistantMessageResponse.ok) {
+            console.log('Assistant message saved successfully');
+          } else {
+            const errorData = await assistantMessageResponse.json().catch(() => ({ error: "Unknown error" }));
+            console.error('Failed to save assistant message:', errorData);
+          }
+        } catch (error) {
+          console.error('Error saving assistant message:', error);
+        }
+      } else {
+        console.error('No current session ID available to save assistant message');
+      }
     } catch (error) {
       console.error("Chat error:", error);
       toast({
@@ -252,17 +493,39 @@ function PdfSummarizer({ droppedFileName, autoProcess }: { droppedFileName?: str
   };
 
   return (
-    <div className="p-8">
-      <h2 className="text-2xl font-bold mb-4">PDF Chat</h2>
-      <p className="mb-4 text-gray-600 dark:text-gray-300">Upload a PDF and chat with AI about its content</p>
+    <div className="p-6">
+      <h2 className="text-xl font-semibold mb-3">PDF Chat</h2>
+      <p className="mb-4 text-gray-600 dark:text-gray-300 text-sm">Upload a PDF and start a conversation about its content</p>
       
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className={`grid gap-6 ${isUploadCollapsed ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'}`}>
         {/* Upload Section */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold flex items-center gap-2">
-            <Upload className="h-5 w-5" />
-            Upload PDF
-          </h3>
+        <div className={`space-y-4 ${isUploadCollapsed ? 'max-w-md' : ''}`}>
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold flex items-center gap-2">
+              <Upload className="h-5 w-5" />
+              Upload PDF
+            </h3>
+            {pdfText && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsUploadCollapsed(!isUploadCollapsed)}
+                className="flex items-center gap-1"
+              >
+                {isUploadCollapsed ? (
+                  <>
+                    <ChevronDown className="h-4 w-4" />
+                    Show Upload
+                  </>
+                ) : (
+                  <>
+                    <ChevronUp className="h-4 w-4" />
+                    Hide Upload
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
           
           <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
             <input
@@ -283,51 +546,80 @@ function PdfSummarizer({ droppedFileName, autoProcess }: { droppedFileName?: str
             </label>
           </div>
 
-          {file && (
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary">{file.name}</Badge>
-              <span className="text-sm text-gray-500">
-                ({(file.size / 1024 / 1024).toFixed(2)} MB)
+          {!isUploadCollapsed && (
+            <>
+              {file && (
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary">{file.name}</Badge>
+                  <span className="text-sm text-gray-500">
+                    ({(file.size / 1024 / 1024).toFixed(2)} MB)
+                  </span>
+                </div>
+              )}
+
+              {isUploading && (
+                <div className="space-y-2">
+                  <Progress value={uploadProgress} className="w-full" />
+                  <p className="text-sm text-gray-600">Uploading and processing PDF...</p>
+                </div>
+              )}
+
+              <Button
+                onClick={handleUpload}
+                disabled={!file || isUploading}
+                className="w-full"
+              >
+                {isUploading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4 mr-2" />
+                    Upload & Process
+                  </>
+                )}
+              </Button>
+            </>
+          )}
+
+          {isUploadCollapsed && pdfText && (
+            <div className="flex items-center gap-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+              <FileText className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              <span className="text-sm text-blue-700 dark:text-blue-300">
+                PDF loaded: {file?.name || 'Document'}
               </span>
             </div>
           )}
-
-          {isUploading && (
-            <div className="space-y-2">
-              <Progress value={uploadProgress} className="w-full" />
-              <p className="text-sm text-gray-600">Uploading and processing PDF...</p>
-            </div>
-          )}
-
-          <Button
-            onClick={handleUpload}
-            disabled={!file || isUploading}
-            className="w-full"
-          >
-            {isUploading ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Processing...
-              </>
-            ) : (
-              <>
-                <Upload className="h-4 w-4 mr-2" />
-                Upload & Process
-              </>
-            )}
-          </Button>
         </div>
 
         {/* Chat Section */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold">Chat with PDF</h3>
+        <div className={`space-y-4 ${isUploadCollapsed ? 'col-span-1' : ''}`}>
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold">Chat</h3>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setIsHistoryOpen(!isHistoryOpen);
+                if (!isHistoryOpen) {
+                  loadChatHistory();
+                }
+              }}
+              className="flex items-center gap-1"
+            >
+              <History className="h-4 w-4" />
+              History
+            </Button>
+          </div>
           
           {/* Chat Messages */}
-          <div className="h-64 max-h-64 overflow-y-auto space-y-4 p-4 border rounded-lg bg-gray-50 dark:bg-gray-800">
+          <div className={`overflow-y-auto space-y-4 p-4 border rounded-lg bg-gray-50 dark:bg-gray-800 ${isUploadCollapsed ? 'h-96 max-h-96' : 'h-64 max-h-64'}`}>
             {chatMessages.length === 0 ? (
               <div className="text-center text-gray-500 mt-8">
                 <FileText className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                <p>Upload a PDF to start chatting about its content</p>
+                <p>Upload a PDF to start a conversation</p>
               </div>
             ) : (
               chatMessages.map((message, index) => (
@@ -357,7 +649,7 @@ function PdfSummarizer({ droppedFileName, autoProcess }: { droppedFileName?: str
                 <div className="bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 p-3 rounded-lg">
                   <div className="flex items-center gap-2">
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    <span className="text-sm">AI is thinking...</span>
+                    <span className="text-sm">Processing...</span>
                   </div>
                 </div>
               </div>
@@ -370,7 +662,7 @@ function PdfSummarizer({ droppedFileName, autoProcess }: { droppedFileName?: str
               value={currentMessage}
               onChange={(e) => setCurrentMessage(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder="Ask a question about the PDF content..."
+              placeholder="Ask a question about the document..."
               className="flex-1"
               rows={2}
               disabled={!pdfText || isSending}
@@ -383,183 +675,103 @@ function PdfSummarizer({ droppedFileName, autoProcess }: { droppedFileName?: str
               <Send className="h-4 w-4" />
             </Button>
           </div>
+
+          {/* History Panel */}
+          {isHistoryOpen && (
+            <div className="border rounded-lg p-4 bg-white dark:bg-gray-800">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="font-semibold flex items-center gap-2">
+                  <Clock className="h-4 w-4" />
+                  Chat History
+                </h4>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsHistoryOpen(false)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              
+              {isLoadingHistory ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                  <span className="ml-2">Loading history...</span>
+                </div>
+              ) : chatHistory.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <History className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                  <p>No chat history found</p>
+                  <p className="text-sm">Start a new PDF chat to see it here</p>
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-64 overflow-y-auto">
+                  {chatHistory.map((session) => (
+                    <div
+                      key={session.id}
+                      className={`p-3 rounded-lg border cursor-pointer transition-colors ${
+                        currentSessionId === session.id
+                          ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700'
+                          : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <FileText className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                            <h5 className="font-medium text-sm truncate">
+                              {session.pdfFileName}
+                            </h5>
+                          </div>
+                          <p className="text-xs text-gray-600 dark:text-gray-300 mb-2">
+                            {session.summary}
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            {new Date(session.updatedAt).toLocaleDateString()} • {session.messages.length} messages
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1 ml-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              loadChatSession(session.id);
+                              setIsHistoryOpen(false);
+                            }}
+                            className="h-6 w-6 p-0"
+                          >
+                            <Clock className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteChatSession(session.id);
+                            }}
+                            className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
+                          >
+                            <Trash className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 }
-function TextExtractorWithOptions({ droppedFileName, autoProcess }: { droppedFileName?: string, autoProcess?: boolean }) {
-  const [language, setLanguage] = useState("en")
-  const [outputFormat, setOutputFormat] = useState("text")
-  const [history, setHistory] = useState<Array<{ id: number; label: string; date: string; snippet: string; fullText: string }>>([])
-  const [result, setResult] = useState<string>("")
-  const [fileName, setFileName] = useState<string>(droppedFileName || "")
-  React.useEffect(() => { if (droppedFileName) setFileName(droppedFileName) }, [droppedFileName])
-  React.useEffect(() => { if (autoProcess && droppedFileName) handleExtract() }, [autoProcess, droppedFileName])
-  function handleExtract() {
-    const fakeText = `Extracted text for ${fileName || "example.pdf"} in ${language.toUpperCase()} (${outputFormat.toUpperCase()})\nLorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.`;
-    setResult(fakeText)
-    setHistory(prev => [
-      { id: Date.now(), label: fileName || "example.pdf", date: new Date().toLocaleString(), snippet: fakeText.slice(0, 100) + (fakeText.length > 100 ? "..." : ""), fullText: fakeText },
-      ...prev.slice(0, 9)
-    ])
-  }
-  function handleCopy(text: string) { navigator.clipboard.writeText(text) }
-  function handleClear(id: number) { setHistory(prev => prev.filter(item => item.id !== id)) }
-  function handleClearAll() { setHistory([]) }
-  return (
-    <div className="p-8">
-      <h2 className="text-2xl font-bold mb-4">Text Extractor</h2>
-      <p className="mb-4 text-gray-600 dark:text-gray-300">Extract text from images or scanned documents.</p>
-      <AdvancedOptionsPanel>
-        <div className="mb-4">
-          <label className="block font-medium mb-1">Language</label>
-          <select
-            className="border rounded px-2 py-1 dark:bg-[#18181b] dark:border-gray-700"
-            value={language}
-            onChange={e => setLanguage(e.target.value)}
-          >
-            <option value="en">English</option>
-            <option value="fr">French</option>
-            <option value="es">Spanish</option>
-            <option value="de">German</option>
-          </select>
-        </div>
-        <div>
-          <label className="block font-medium mb-1">Output Format</label>
-          <div className="flex gap-3">
-            {['text', 'pdf', 'docx'].map(opt => (
-              <label key={opt} className="flex items-center gap-1 cursor-pointer">
-                <input
-                  type="radio"
-                  name="outputFormat"
-                  value={opt}
-                  checked={outputFormat === opt}
-                  onChange={() => setOutputFormat(opt)}
-                  className="accent-blue-600"
-                />
-                <span className="capitalize">{opt.toUpperCase()}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-      </AdvancedOptionsPanel>
-      {/* Simulated file input */}
-      <div className="mb-4 flex gap-2 items-center">
-        <input
-          type="text"
-          placeholder="File name (simulate upload)"
-          value={fileName}
-          onChange={e => setFileName(e.target.value)}
-          className="border rounded px-2 py-1 dark:bg-[#18181b] dark:border-gray-700"
-        />
-        <Button onClick={handleExtract} type="button">Extract</Button>
-      </div>
-      {/* Main result */}
-      {result && (
-        <div className="mb-6 p-4 bg-slate-50 dark:bg-[#23232a] rounded border border-slate-200 dark:border-slate-700">
-          <div className="flex justify-between items-center mb-2">
-            <span className="font-semibold">Result</span>
-            <Button size="sm" variant="outline" onClick={() => handleCopy(result)}>Copy</Button>
-          </div>
-          <div className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">{result}</div>
-        </div>
-      )}
-      <ResultsHistoryPanel history={history} onCopy={handleCopy} onClear={handleClear} onClearAll={handleClearAll} />
-    </div>
-  )
-}
 
 
 
-function DocumentConverterWithOptions() {
-  const [fromFormat, setFromFormat] = useState("pdf")
-  const [toFormat, setToFormat] = useState("docx")
-  const [batch, setBatch] = useState(false)
-  const [history, setHistory] = useState<Array<{ id: number; label: string; date: string; snippet: string; fullText: string }>>([])
-  const [result, setResult] = useState<string>("")
-  const [fileName, setFileName] = useState<string>("")
-  function handleConvert() {
-    const fakeResult = `Converted ${fileName || "example.pdf"} from ${fromFormat.toUpperCase()} to ${toFormat.toUpperCase()}${batch ? " (batch)" : ""}.\nDownload link: /fake/path/${fileName || "example"}.${toFormat}`
-    setResult(fakeResult)
-    setHistory(prev => [
-      { id: Date.now(), label: fileName || "example.pdf", date: new Date().toLocaleString(), snippet: fakeResult.slice(0, 100) + (fakeResult.length > 100 ? "..." : ""), fullText: fakeResult },
-      ...prev.slice(0, 9)
-    ])
-  }
-  function handleCopy(text: string) { navigator.clipboard.writeText(text) }
-  function handleClear(id: number) { setHistory(prev => prev.filter(item => item.id !== id)) }
-  function handleClearAll() { setHistory([]) }
-  return (
-    <div className="p-8">
-      <h2 className="text-2xl font-bold mb-4">Document Converter</h2>
-      <p className="mb-4 text-gray-600 dark:text-gray-300">Convert between PDF, Word, TXT, HTML, and Markdown formats.</p>
-      <AdvancedOptionsPanel>
-        <div className="mb-4">
-          <label className="block font-medium mb-1">Convert From</label>
-          <select
-            className="border rounded px-2 py-1 dark:bg-[#18181b] dark:border-gray-700"
-            value={fromFormat}
-            onChange={e => setFromFormat(e.target.value)}
-          >
-            <option value="pdf">PDF</option>
-            <option value="docx">Word (DOCX)</option>
-            <option value="txt">TXT</option>
-            <option value="html">HTML</option>
-            <option value="md">Markdown</option>
-          </select>
-        </div>
-        <div className="mb-4">
-          <label className="block font-medium mb-1">Convert To</label>
-          <select
-            className="border rounded px-2 py-1 dark:bg-[#18181b] dark:border-gray-700"
-            value={toFormat}
-            onChange={e => setToFormat(e.target.value)}
-          >
-            <option value="pdf">PDF</option>
-            <option value="docx">Word (DOCX)</option>
-            <option value="txt">TXT</option>
-            <option value="html">HTML</option>
-            <option value="md">Markdown</option>
-          </select>
-        </div>
-        <div>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={batch}
-              onChange={e => setBatch(e.target.checked)}
-              className="accent-blue-600"
-            />
-            <span>Enable batch processing</span>
-          </label>
-        </div>
-      </AdvancedOptionsPanel>
-      {/* Simulated file input */}
-      <div className="mb-4 flex gap-2 items-center">
-        <input
-          type="text"
-          placeholder="File name (simulate upload)"
-          value={fileName}
-          onChange={e => setFileName(e.target.value)}
-          className="border rounded px-2 py-1 dark:bg-[#18181b] dark:border-gray-700"
-        />
-        <Button onClick={handleConvert} type="button">Convert</Button>
-      </div>
-      {/* Main result */}
-      {result && (
-        <div className="mb-6 p-4 bg-slate-50 dark:bg-[#23232a] rounded border border-slate-200 dark:border-slate-700">
-          <div className="flex justify-between items-center mb-2">
-            <span className="font-semibold">Result</span>
-            <Button size="sm" variant="outline" onClick={() => handleCopy(result)}>Copy</Button>
-          </div>
-          <div className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">{result}</div>
-        </div>
-      )}
-      <ResultsHistoryPanel history={history} onCopy={handleCopy} onClear={handleClear} onClearAll={handleClearAll} />
-    </div>
-  )
-}
+
+
 
 // Image Generator component following the same pattern as PDF chat
 function ImageGenerator({ droppedFileName, autoProcess }: { droppedFileName?: string, autoProcess?: boolean }) {
@@ -695,16 +907,16 @@ function ImageGenerator({ droppedFileName, autoProcess }: { droppedFileName?: st
       setGeneratedImages(prev => [...newImages, ...prev]);
 
       toast({
-        title: "Images generated successfully",
-        description: `Generated ${data.total_images} image(s) in ${data.processing_time.toFixed(1)}s`,
+        title: "Images created successfully",
+        description: `Created ${data.total_images} image(s) in ${data.processing_time.toFixed(1)}s`,
       });
 
     } catch (error: any) {
       console.error("Generation error:", error);
       
       // Handle specific error cases
-      let errorMessage = error.message || "Failed to generate images. Please try again.";
-      let errorTitle = "Generation failed";
+      let errorMessage = error.message || "Failed to create images. Please try again.";
+      let errorTitle = "Creation failed";
       
       if (error.message && error.message.includes("Model not loaded")) {
         errorTitle = "Model Not Ready";
@@ -713,8 +925,8 @@ function ImageGenerator({ droppedFileName, autoProcess }: { droppedFileName?: st
         errorTitle = "Memory Issue";
         errorMessage = "Not enough memory to generate images. Try reducing image size or inference steps.";
       } else if (error.message && error.message.includes("timeout")) {
-        errorTitle = "Generation Timeout";
-        errorMessage = "Image generation took too long. Try reducing inference steps or image size.";
+        errorTitle = "Creation Timeout";
+        errorMessage = "Image creation took too long. Try reducing inference steps or image size.";
       }
       
       toast({
@@ -762,9 +974,9 @@ function ImageGenerator({ droppedFileName, autoProcess }: { droppedFileName?: st
             <span className="text-white text-lg">🎨</span>
           </div>
           <div>
-            <h2 className="text-2xl font-bold">AI Image Generator</h2>
-            <p className="text-gray-600 dark:text-gray-300">
-              Create stunning images with AI using local Stable Diffusion (CPU-based)
+            <h2 className="text-xl font-semibold">Image Generator</h2>
+            <p className="text-gray-600 dark:text-gray-300 text-sm">
+              Create images using local Stable Diffusion
             </p>
           </div>
         </div>
@@ -820,12 +1032,12 @@ function ImageGenerator({ droppedFileName, autoProcess }: { droppedFileName?: st
               </CardHeader>
               <CardContent className="space-y-3">
                 <p className="text-yellow-700 dark:text-yellow-300 text-sm">
-                  The local Stable Diffusion model is still loading. This may take a few minutes on first startup.
+                  The model is still loading. This may take a few minutes on first startup.
                 </p>
                 <ul className="text-sm text-yellow-700 dark:text-yellow-300 space-y-1">
                   <li>• <strong>First Time:</strong> Model downloads ~4GB on first run</li>
                   <li>• <strong>Loading:</strong> Model loads into memory (2-3 minutes)</li>
-                  <li>• <strong>CPU Generation:</strong> Images will be generated locally</li>
+                  <li>• <strong>Generation:</strong> Images will be generated locally</li>
                 </ul>
                 <div className="flex gap-2">
                   <Button
@@ -842,8 +1054,8 @@ function ImageGenerator({ droppedFileName, autoProcess }: { droppedFileName?: st
 
           <Card>
             <CardHeader>
-              <CardTitle>Generation Settings</CardTitle>
-              <CardDescription>Configure your image generation parameters</CardDescription>
+                          <CardTitle>Settings</CardTitle>
+            <CardDescription>Configure image generation parameters</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Prompt Input */}
@@ -851,7 +1063,7 @@ function ImageGenerator({ droppedFileName, autoProcess }: { droppedFileName?: st
                 <Label htmlFor="prompt">Prompt</Label>
                 <Textarea
                   id="prompt"
-                  placeholder="Describe the image you want to generate..."
+                  placeholder="Describe the image you want to create..."
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   rows={3}
@@ -1029,7 +1241,7 @@ function ImageGenerator({ droppedFileName, autoProcess }: { droppedFileName?: st
                 ) : (
                   <>
                     <span className="mr-2">🎨</span>
-                    Generate Images
+                    Create Images
                   </>
                 )}
               </Button>
@@ -1093,42 +1305,34 @@ function ImageGenerator({ droppedFileName, autoProcess }: { droppedFileName?: st
 const tools = [
   {
     key: "pdf",
-    name: "PDF Summarizer",
-    icon: <FileText className="h-5 w-5" />,
+    name: "PDF Chat",
+    icon: <div className="h-6 w-6 rounded-lg flex items-center justify-center bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 border border-blue-200 dark:border-blue-700 shadow-sm">
+      <Image src="/pdf_chat.png" alt="PDF Chat" width={18} height={18} className="rounded object-cover" />
+    </div>,
     component: <PdfSummarizer />,
-  },
-  {
-    key: "extractor",
-    name: "Text Extractor",
-    icon: <ImageIcon className="h-5 w-5" />,
-    component: <TextExtractorWithOptions />,
   },
   {
     key: "humanizer",
     name: "Text Humanizer",
-    icon: <Sparkles className="h-5 w-5" />,
+    icon: <div className="h-6 w-6 rounded-lg flex items-center justify-center bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 border border-blue-200 dark:border-blue-700 shadow-sm">
+      <Image src="/text_hum.png" alt="Text Humanizer" width={18} height={18} className="rounded object-cover" />
+    </div>,
     component: <TextHumanizer />,
-  },
-  {
-    key: "converter",
-    name: "Document Converter",
-    icon: <FileSymlink className="h-5 w-5" />,
-    component: <DocumentConverterWithOptions />,
   },
   {
     key: "generator",
     name: "Image Generator",
-    icon: <Wand2 className="h-5 w-5" />,
+    icon: <div className="h-6 w-6 rounded-lg flex items-center justify-center bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 border border-blue-200 dark:border-blue-700 shadow-sm">
+      <Image src="/image_gen.png" alt="Image Generator" width={18} height={18} className="rounded object-cover" />
+    </div>,
     component: <ImageGenerator />,
   },
 ]
 
 const toolDescriptions: Record<string, string> = {
-  pdf: "Upload a PDF and chat with AI about its content. Ask questions, get summaries, and explore the document interactively.",
-  extractor: "Extract text from images or scanned documents. Supports PDF, PNG, JPG, and more.",
-  humanizer: "Paste or type AI-generated or formal text and convert it to natural, human-like writing.",
-  converter: "Convert between PDF, Word, TXT, HTML, and Markdown formats. Batch processing supported.",
-          generator: "Create stunning images with AI using Hugging Face's Stable Diffusion models. Multiple styles and models available.",
+  pdf: "Upload a PDF and chat about its content. Ask questions and get insights.",
+  humanizer: "Transform formal or AI-generated text into natural, human-like writing.",
+  generator: "Create images with AI using Stable Diffusion models.",
 }
 
 export default function Home() {
@@ -1269,9 +1473,7 @@ export default function Home() {
   // Pass dropped file name to tool components via props
   function getToolComponent(toolKey: string) {
     if (toolKey === "pdf") return <PdfSummarizer droppedFileName={droppedFile?.tool === "pdf" ? droppedFile.fileName : undefined} autoProcess={!!droppedFile?.file && droppedFile.tool === "pdf"} />
-    if (toolKey === "extractor") return <TextExtractorWithOptions droppedFileName={droppedFile?.tool === "extractor" ? droppedFile.fileName : undefined} autoProcess={!!droppedFile?.file && droppedFile.tool === "extractor"} />
     if (toolKey === "humanizer") return <TextHumanizer />
-    if (toolKey === "converter") return <DocumentConverterWithOptions />
     if (toolKey === "generator") return <ImageGenerator droppedFileName={droppedFile?.tool === "generator" ? droppedFile.fileName : undefined} autoProcess={!!droppedFile?.file && droppedFile.tool === "generator"} />
     return null
   }
@@ -1396,12 +1598,12 @@ export default function Home() {
         <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-20 h-16">
           <div className="flex items-center justify-between h-full px-6">
             <div className="flex items-center gap-3">
-              <div className="h-8 w-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                <Sparkles className="h-4 w-4 text-white" />
+              <div className="h-12 w-12 rounded-xl flex items-center justify-center bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 border border-blue-200 dark:border-blue-700 shadow-sm">
+                <Image src="/agora.png" alt="AgoraAI Logo" width={44} height={44} className="rounded-lg object-cover" />
               </div>
               <div>
                 <h1 className="text-xl font-bold text-gray-900 dark:text-white">AgoraAI</h1>
-                <p className="text-sm text-gray-600 dark:text-gray-300">Extract, humanize, and process documents with AI</p>
+                <p className="text-sm text-gray-600 dark:text-gray-300">Document processing and chat tools</p>
               </div>
             </div>
             <div className="flex items-center gap-4">
@@ -1466,7 +1668,9 @@ export default function Home() {
             {/* Top bar for mobile to open sidebar */}
             <div className="md:hidden flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-[#18181b]/80 sticky top-0 z-10">
               <div className="flex items-center gap-2">
-                <Image src="/Agora.jpeg" alt="AgoraAI Logo" width={28} height={28} className="rounded-xl" />
+                <div className="h-8 w-8 rounded-lg flex items-center justify-center bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 border border-blue-200 dark:border-blue-700 shadow-sm">
+                  <Image src="/agora.png" alt="AgoraAI Logo" width={28} height={28} className="rounded-lg object-cover" />
+                </div>
                 <span className="font-bold text-lg tracking-tight">AgoraAI</span>
               </div>
               <button onClick={() => setSidebarOpen(true)} aria-label="Open sidebar">

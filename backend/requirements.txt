@@ -13,5 +13,10 @@ Pillow>=10.0.0
 pdfplumber>=0.10.0
 python-magic>=0.4.27
 python-dotenv==1.0.0
+# Image generation dependencies
+torch>=2.0.0
+diffusers>=0.21.0
+transformers>=4.30.0
+accelerate>=0.20.0
 # Note: Database dependencies removed for Windows compatibility
 # You can add them back later when needed 

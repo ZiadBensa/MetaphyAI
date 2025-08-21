@@ -14,19 +14,19 @@ const MODEL_OPTIONS = [
   { 
     value: "semantic", 
     label: "Semantic Enhanced", 
-    description: "AI-powered semantic analysis with 50+ word patterns and context awareness",
+    description: "Advanced semantic analysis with context awareness",
     color: "bg-green-100 text-green-800"
   },
   { 
     value: "regex", 
-    label: "Basic Regex", 
+    label: "Basic Rules", 
     description: "Simple rule-based transformation",
     color: "bg-yellow-100 text-yellow-800"
   },
   { 
     value: "gemini", 
-    label: "Gemini AI (Advanced)", 
-    description: "Google's Gemini AI for advanced text restructuring and natural language generation",
+    label: "Advanced", 
+    description: "Advanced text restructuring and natural language generation",
     color: "bg-purple-100 text-purple-800"
   },
 ]
@@ -80,8 +80,8 @@ export default function TextHumanizer() {
       setAiDetectionResult(data)
       
       toast({
-        title: "AI Detection Complete! 🔍",
-        description: data.is_ai_generated ? "AI content detected" : "Human-like content detected",
+        title: "Analysis Complete! 🔍",
+        description: data.is_ai_generated ? "Generated content detected" : "Natural content detected",
         variant: "default",
       })
     } catch (error) {
@@ -252,10 +252,10 @@ export default function TextHumanizer() {
     <div className="w-full h-full flex flex-col">
       {/* Header */}
       <div className="text-center mb-4">
-        <h1 className="text-xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent mb-2">
-          AI Text Tools
+        <h1 className="text-xl font-semibold mb-2">
+          Text Tools
         </h1>
-        <p className="text-sm text-gray-600">Detect AI content and humanize text</p>
+        <p className="text-sm text-gray-600">Detect content and humanize text</p>
       </div>
 
       {/* Tabs */}
@@ -263,11 +263,11 @@ export default function TextHumanizer() {
         <TabsList className="grid w-full grid-cols-2 mb-4">
           <TabsTrigger value="ai-detection" className="flex items-center gap-2">
             <Bot className="w-4 h-4" />
-            AI Detection
+            Detection
           </TabsTrigger>
           <TabsTrigger value="text-humanizer" className="flex items-center gap-2">
             <User className="w-4 h-4" />
-            Text Humanizer
+            Humanizer
           </TabsTrigger>
         </TabsList>
 
@@ -295,7 +295,7 @@ export default function TextHumanizer() {
                 <Textarea
                   value={aiDetectionText}
                   onChange={(e) => handleTextChange(e, "ai")}
-                  placeholder="Paste text to detect if it's AI-generated..."
+                  placeholder="Paste text to analyze..."
                   className="h-full min-h-[400px] resize-none border-0 focus-visible:ring-0 text-gray-700 bg-gray-50 text-sm leading-relaxed"
                   style={{ minHeight: '400px', height: 'auto' }}
                 />
