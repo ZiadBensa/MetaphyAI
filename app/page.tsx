@@ -970,9 +970,6 @@ function ImageGenerator({ droppedFileName, autoProcess }: { droppedFileName?: st
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
-            <span className="text-white text-lg">🎨</span>
-          </div>
           <div>
             <h2 className="text-xl font-semibold">Image Generator</h2>
             <p className="text-gray-600 dark:text-gray-300 text-sm">
@@ -996,7 +993,6 @@ function ImageGenerator({ droppedFileName, autoProcess }: { droppedFileName?: st
               </>
             ) : (
               <>
-                          <span className="mr-2">🔍</span>
           Check Model Status
               </>
             )}
@@ -1240,7 +1236,6 @@ function ImageGenerator({ droppedFileName, autoProcess }: { droppedFileName?: st
                   </>
                 ) : (
                   <>
-                    <span className="mr-2">🎨</span>
                     Create Images
                   </>
                 )}
@@ -1259,7 +1254,6 @@ function ImageGenerator({ droppedFileName, autoProcess }: { droppedFileName?: st
             <CardContent>
               {generatedImages.length === 0 ? (
                 <div className="text-center py-12 text-gray-500">
-                  <span className="text-4xl mb-4 block">🎨</span>
                   <p>No images generated yet</p>
                   <p className="text-sm">Enter a prompt and click generate to create your first image</p>
                 </div>
@@ -1307,7 +1301,7 @@ const tools = [
     key: "pdf",
     name: "PDF Chat",
     icon: <div className="h-6 w-6 rounded-lg flex items-center justify-center bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 border border-blue-200 dark:border-blue-700 shadow-sm">
-      <Image src="/pdf_chat.png" alt="PDF Chat" width={18} height={18} className="rounded object-cover" />
+      <Image src="/pdf_chat1.png" alt="PDF Chat" width={18} height={18} className="rounded object-cover" />
     </div>,
     component: <PdfSummarizer />,
   },
@@ -1315,15 +1309,15 @@ const tools = [
     key: "humanizer",
     name: "Text Humanizer",
     icon: <div className="h-6 w-6 rounded-lg flex items-center justify-center bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 border border-blue-200 dark:border-blue-700 shadow-sm">
-      <Image src="/text_hum.png" alt="Text Humanizer" width={18} height={18} className="rounded object-cover" />
+      <Image src="/text_hum12.png" alt="Text Humanizer" width={18} height={18} className="rounded object-cover" />
     </div>,
     component: <TextHumanizer />,
   },
   {
     key: "generator",
     name: "Image Generator",
-    icon: <div className="h-6 w-6 rounded-lg flex items-center justify-center bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 border border-blue-200 dark:border-blue-700 shadow-sm">
-      <Image src="/image_gen.png" alt="Image Generator" width={18} height={18} className="rounded object-cover" />
+    icon: <div className="h-6 w-6 flex items-center justify-center">
+      <Image src="/image_gen1.png" alt="Image Generator" width={18} height={18} className="rounded object-cover" />
     </div>,
     component: <ImageGenerator />,
   },
@@ -1599,7 +1593,7 @@ export default function Home() {
           <div className="flex items-center justify-between h-full px-6">
             <div className="flex items-center gap-3">
               <div className="h-12 w-12 rounded-xl flex items-center justify-center bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 border border-blue-200 dark:border-blue-700 shadow-sm">
-                <Image src="/agora.png" alt="AgoraAI Logo" width={44} height={44} className="rounded-lg object-cover" />
+                <Image src="/agoraai.png" alt="AgoraAI Logo" width={50} height={50} className="rounded-lg object-cover" />
               </div>
               <div>
                 <h1 className="text-xl font-bold text-gray-900 dark:text-white">AgoraAI</h1>
