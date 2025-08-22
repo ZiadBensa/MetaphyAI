@@ -18,6 +18,9 @@ model User {
   updatedAt DateTime @updatedAt
   documents Document[]
   chatSessions ChatSession[]
+  subscription Subscription?
+  usageRecords UsageRecord[]
+  billingHistory BillingHistory[]
 }
 
 model Document {
@@ -52,4 +55,46 @@ model ChatMessage {
   role         String      // "user" or "assistant"
   content      String      @db.Text
   timestamp    DateTime    @default(now())
+}
+
+// Subscription and Pricing Models
+model Subscription {
+  id          String   @id @default(dbgenerated("concat('sub_', replace(cast(gen_random_uuid() as text), '-', '') )"))
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String   @unique
+  plan        String   @default("free") // "free" or "pro"
+  status      String   @default("active") // "active", "cancelled", "expired"
+  startDate   DateTime @default(now())
+  endDate     DateTime?
+  stripeCustomerId String?
+  stripeSubscriptionId String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model UsageRecord {
+  id          String   @id @default(dbgenerated("concat('usage_', replace(cast(gen_random_uuid() as text), '-', '') )"))
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  feature     String   // "pdf_chat", "image_generation", "text_humanizer"
+  usageCount  Int      @default(0)
+  month       Int      // 1-12
+  year        Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, feature, month, year])
+}
+
+model BillingHistory {
+  id          String   @id @default(dbgenerated("concat('bill_', replace(cast(gen_random_uuid() as text), '-', '') )"))
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  amount      Float
+  currency    String   @default("USD")
+  status      String   // "pending", "completed", "failed", "refunded"
+  stripePaymentIntentId String?
+  description String
+  plan        String   // "pro"
+  createdAt   DateTime @default(now())
 }

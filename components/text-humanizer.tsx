@@ -59,6 +59,24 @@ export default function TextHumanizer() {
       return
     }
 
+    // Check usage limit before processing
+    try {
+      const usageResponse = await fetch('/api/usage?feature=text_humanizer');
+      if (usageResponse.ok) {
+        const usageData = await usageResponse.json();
+        if (!usageData.allowed) {
+          toast({
+            title: "Usage limit reached",
+            description: `You've reached your text humanizer limit for this month. Upgrade to Pro for more usage.`,
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+    } catch (error) {
+      console.error('Error checking usage:', error);
+    }
+
     setIsAiDetecting(true)
     
     try {
@@ -78,6 +96,17 @@ export default function TextHumanizer() {
 
       const data = await response.json()
       setAiDetectionResult(data)
+
+      // Increment usage after successful processing
+      try {
+        await fetch('/api/usage', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ feature: 'text_humanizer', amount: aiDetectionText.length })
+        });
+      } catch (error) {
+        console.error('Error incrementing usage:', error);
+      }
       
       toast({
         title: "Analysis Complete! 🔍",
@@ -105,6 +134,24 @@ export default function TextHumanizer() {
         variant: "destructive",
       })
       return
+    }
+
+    // Check usage limit before processing
+    try {
+      const usageResponse = await fetch('/api/usage?feature=text_humanizer');
+      if (usageResponse.ok) {
+        const usageData = await usageResponse.json();
+        if (!usageData.allowed) {
+          toast({
+            title: "Usage limit reached",
+            description: `You've reached your text humanizer limit for this month. Upgrade to Pro for more usage.`,
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+    } catch (error) {
+      console.error('Error checking usage:', error);
     }
 
     setIsLoading(true)
@@ -137,6 +184,17 @@ export default function TextHumanizer() {
       setShowComparison(true)
       setProcessingTime(data.processing_time || (Date.now() - startTime) / 1000)
       setAiDetection(data.ai_detection)
+
+      // Increment usage after successful processing
+      try {
+        await fetch('/api/usage', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ feature: 'text_humanizer', amount: originalText.length })
+        });
+      } catch (error) {
+        console.error('Error incrementing usage:', error);
+      }
       
       const modelInfo = MODEL_OPTIONS.find(m => m.value === selectedModel)
       toast({

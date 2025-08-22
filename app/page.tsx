@@ -251,6 +251,24 @@ function PdfSummarizer({ droppedFileName, autoProcess }: { droppedFileName?: str
       return;
     }
 
+    // Check usage limit before uploading
+    try {
+      const usageResponse = await fetch('/api/usage?feature=pdf_chat');
+      if (usageResponse.ok) {
+        const usageData = await usageResponse.json();
+        if (!usageData.allowed) {
+          toast({
+            title: "Usage limit reached",
+            description: `You've reached your PDF chat limit for this month. Upgrade to Pro for more usage.`,
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+    } catch (error) {
+      console.error('Error checking usage:', error);
+    }
+
     setIsUploading(true);
     setUploadProgress(0);
 
@@ -284,6 +302,17 @@ function PdfSummarizer({ droppedFileName, autoProcess }: { droppedFileName?: str
 
       const data = await response.json();
       setPdfText(data.text);
+
+      // Increment usage after successful upload
+      try {
+        await fetch('/api/usage', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ feature: 'pdf_chat', amount: 1 })
+        });
+      } catch (error) {
+        console.error('Error incrementing usage:', error);
+      }
       
       // Create chat session
       const summary = generateSummary(data.text);
@@ -843,6 +872,24 @@ function ImageGenerator({ droppedFileName, autoProcess }: { droppedFileName?: st
       return;
     }
 
+    // Check usage limit before generating
+    try {
+      const usageResponse = await fetch('/api/usage?feature=image_generation');
+      if (usageResponse.ok) {
+        const usageData = await usageResponse.json();
+        if (!usageData.allowed) {
+          toast({
+            title: "Usage limit reached",
+            description: `You've reached your image generation limit for this month. Upgrade to Pro for more usage.`,
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+    } catch (error) {
+      console.error('Error checking usage:', error);
+    }
+
     setIsGenerating(true);
 
     try {
@@ -888,6 +935,17 @@ function ImageGenerator({ droppedFileName, autoProcess }: { droppedFileName?: st
       // Check if the response contains an error
       if (data.error) {
         throw new Error(data.error);
+      }
+
+      // Increment usage after successful generation
+      try {
+        await fetch('/api/usage', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ feature: 'image_generation', amount: numImages })
+        });
+      } catch (error) {
+        console.error('Error incrementing usage:', error);
       }
       
       // Check if images array exists
@@ -1606,6 +1664,13 @@ export default function Home() {
                   Welcome, {session.user.name?.split(" ")[0]}!
                 </div>
               )}
+              <Button 
+                variant="outline" 
+                className="hidden sm:flex items-center gap-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white border-0 hover:from-blue-600 hover:to-purple-700"
+                onClick={() => window.location.href = '/pricing'}
+              >
+                Try Pro
+              </Button>
               <UserMenu />
             </div>
           </div>
@@ -1667,9 +1732,19 @@ export default function Home() {
                 </div>
                 <span className="font-bold text-lg tracking-tight">AgoraAI</span>
               </div>
-              <button onClick={() => setSidebarOpen(true)} aria-label="Open sidebar">
-                <Menu className="h-6 w-6" />
-              </button>
+              <div className="flex items-center gap-2">
+                <Button 
+                  size="sm"
+                  variant="outline" 
+                  className="bg-gradient-to-r from-blue-500 to-purple-600 text-white border-0 hover:from-blue-600 hover:to-purple-700 text-xs"
+                  onClick={() => window.location.href = '/pricing'}
+                >
+                  Pro
+                </Button>
+                <button onClick={() => setSidebarOpen(true)} aria-label="Open sidebar">
+                  <Menu className="h-6 w-6" />
+                </button>
+              </div>
             </div>
             
             {/* Tool workspace - Fixed height with internal scrolling */}

@@ -112,6 +112,18 @@ export default function SignIn() {
           <div className="text-center text-sm text-gray-600">
             <p>By signing in, you agree to our Terms of Service and Privacy Policy</p>
           </div>
+          
+          {/* Admin Access Button */}
+          <div className="text-center pt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.location.href = '/admin'}
+              className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+            >
+              Admin Access
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>
