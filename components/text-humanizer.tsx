@@ -10,6 +10,20 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Copy, RotateCcw, Sparkles, Eye, EyeOff, Bot, User } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
+interface AiDetectionResult {
+  is_ai_generated: boolean;
+  confidence: number;
+  details?: Record<string, unknown>;
+  analysis?: string;
+  scores?: Record<string, number>;
+}
+
+interface HumanizationResult {
+  humanized_text: string;
+  changes_made: number;
+  details?: Record<string, unknown>;
+}
+
 const MODEL_OPTIONS = [
   { 
     value: "semantic", 
@@ -34,7 +48,7 @@ const MODEL_OPTIONS = [
 export default function TextHumanizer() {
   // AI Detection State
   const [aiDetectionText, setAiDetectionText] = useState("")
-  const [aiDetectionResult, setAiDetectionResult] = useState<any>(null)
+  const [aiDetectionResult, setAiDetectionResult] = useState<AiDetectionResult | null>(null)
   const [isAiDetecting, setIsAiDetecting] = useState(false)
 
   // Text Humanization State
@@ -44,7 +58,7 @@ export default function TextHumanizer() {
   const [isLoading, setIsLoading] = useState(false)
   const [showComparison, setShowComparison] = useState(false)
   const [processingTime, setProcessingTime] = useState<number | null>(null)
-  const [aiDetection, setAiDetection] = useState<any>(null)
+  const [aiDetection, setAiDetection] = useState<AiDetectionResult | null>(null)
   
   const { toast } = useToast()
 
@@ -74,7 +88,7 @@ export default function TextHumanizer() {
         }
       }
     } catch (error) {
-      console.error('Error checking usage:', error);
+      // Silent error handling for usage check
     }
 
     setIsAiDetecting(true)
@@ -105,7 +119,7 @@ export default function TextHumanizer() {
           body: JSON.stringify({ feature: 'text_humanizer', amount: aiDetectionText.length })
         });
       } catch (error) {
-        console.error('Error incrementing usage:', error);
+        // Silent error handling for usage increment
       }
       
       toast({
@@ -114,7 +128,6 @@ export default function TextHumanizer() {
         variant: "default",
       })
     } catch (error) {
-      console.error("Error detecting AI content:", error)
       toast({
         title: "Detection failed",
         description: "Please check if the backend server is running on port 8000.",
@@ -151,7 +164,7 @@ export default function TextHumanizer() {
         }
       }
     } catch (error) {
-      console.error('Error checking usage:', error);
+      // Silent error handling for usage check
     }
 
     setIsLoading(true)
@@ -176,10 +189,6 @@ export default function TextHumanizer() {
       }
 
       const data = await response.json()
-      console.log('API Response:', data)
-      console.log('Humanized text:', data.humanized_text)
-      console.log('Original text:', originalText)
-      console.log('Same text?', data.humanized_text === originalText)
       setHumanizedText(data.humanized_text)
       setShowComparison(true)
       setProcessingTime(data.processing_time || (Date.now() - startTime) / 1000)
@@ -193,7 +202,7 @@ export default function TextHumanizer() {
           body: JSON.stringify({ feature: 'text_humanizer', amount: originalText.length })
         });
       } catch (error) {
-        console.error('Error incrementing usage:', error);
+        // Silent error handling for usage increment
       }
       
       const modelInfo = MODEL_OPTIONS.find(m => m.value === selectedModel)
@@ -203,7 +212,6 @@ export default function TextHumanizer() {
         variant: "default",
       })
     } catch (error) {
-      console.error("Error humanizing text:", error)
       toast({
         title: "Rephrasing failed",
         description: "Please check if the backend server is running on port 8000.",
@@ -405,7 +413,7 @@ export default function TextHumanizer() {
                       <div>
                         <p className="text-xs font-medium text-gray-600 mb-2">Individual Scores</p>
                                 <div className="space-y-1 max-h-32 overflow-y-auto">
-          {Object.entries(aiDetectionResult.scores).map(([key, value]) => (
+          {aiDetectionResult.scores && Object.entries(aiDetectionResult.scores).map(([key, value]) => (
             <div key={key} className="flex justify-between text-xs">
               <span className="capitalize">{key.replace('_', ' ')}:</span>
               <span className="font-medium">
@@ -658,7 +666,7 @@ export default function TextHumanizer() {
                     <div className="space-y-2">
                       <p className="text-xs font-medium text-gray-600">Individual Scores</p>
                               <div className="space-y-1 max-h-32 overflow-y-auto">
-          {Object.entries(aiDetection.scores).map(([key, value]) => (
+          {aiDetection.scores && Object.entries(aiDetection.scores).map(([key, value]) => (
             <div key={key} className="flex justify-between text-xs">
               <span className="capitalize">{key.replace('_', ' ')}:</span>
               <span className="font-medium">

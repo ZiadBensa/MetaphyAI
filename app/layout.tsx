@@ -3,14 +3,14 @@ import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
 import AuthSessionProvider from "@/components/auth/session-provider"
+import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
 
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "AgoraAI",
-  description: "Extract, humanize, and process documents with AI",
-    generator: 'v0.dev'
+  title: "AgoraAI - Document Processing and Chat Tools",
+  description: "AI-powered PDF chat, image generation, and text humanization tools",
 }
 
 export default function RootLayout({
@@ -18,12 +18,20 @@ export default function RootLayout({
 }: {
   children: React.ReactNode
 }) {
-  // No server-side session fetch – the client provider will handle it.
   return (
     <html lang="en">
       <body className={inter.className}>
-        <AuthSessionProvider>{children}</AuthSessionProvider>
-        <Toaster />
+        <AuthSessionProvider>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="light"
+            enableSystem={false}
+            disableTransitionOnChange
+          >
+            {children}
+            <Toaster />
+          </ThemeProvider>
+        </AuthSessionProvider>
       </body>
     </html>
   )

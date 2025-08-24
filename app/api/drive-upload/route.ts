@@ -99,8 +99,6 @@ export async function POST(req: NextRequest) {
     
     return NextResponse.json({ success: true, file: res.data });
   } catch (err: any) {
-    console.error('Google Drive API Error:', err);
-    
     // Provide more specific error messages
     if (err.code === 401) {
       return NextResponse.json({ 

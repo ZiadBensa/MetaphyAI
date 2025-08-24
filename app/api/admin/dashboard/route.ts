@@ -65,7 +65,6 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('Admin dashboard error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -144,6 +143,46 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({ success: true, message: 'User deleted successfully' });
 
+      case 'reset_to_free':
+        if (!userId) {
+          return NextResponse.json(
+            { error: 'Missing userId' },
+            { status: 400 }
+          );
+        }
+
+        // Reset user's subscription back to free plan
+        await prisma.subscription.upsert({
+          where: { userId },
+          update: {
+            plan: 'free',
+            status: 'active',
+            updatedAt: new Date(),
+          },
+          create: {
+            userId,
+            plan: 'free',
+            status: 'active',
+          },
+        });
+
+        // Also reset all usage for the user
+        await prisma.usageRecord.updateMany({
+          where: {
+            userId,
+            month: new Date().getMonth() + 1,
+            year: new Date().getFullYear(),
+          },
+          data: {
+            usageCount: 0,
+          },
+        });
+
+        return NextResponse.json({ 
+          success: true, 
+          message: 'User reset to free plan and usage cleared successfully' 
+        });
+
       default:
         return NextResponse.json(
           { error: 'Invalid action' },
@@ -151,7 +190,6 @@ export async function POST(request: NextRequest) {
         );
     }
   } catch (error) {
-    console.error('Admin action error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

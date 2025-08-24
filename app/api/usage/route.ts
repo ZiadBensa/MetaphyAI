@@ -31,7 +31,6 @@ export async function GET(request: NextRequest) {
       });
     }
   } catch (error) {
-    console.error('Error checking usage:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -68,7 +67,6 @@ export async function POST(request: NextRequest) {
       usage: updatedUsage
     });
   } catch (error) {
-    console.error('Error incrementing usage:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

@@ -4,6 +4,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { useSession } from "next-auth/react"
 import { Download, Trash, UploadCloud, FolderOpen } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
 
 // Dummy data for demonstration
 const initialFiles = [
@@ -18,6 +19,7 @@ export default function DocumentsPage() {
   const [selected, setSelected] = useState<number[]>([])
   const [files, setFiles] = useState(initialFiles)
   const [driveFolderUrl, setDriveFolderUrl] = useState<string | null>(null)
+  const { toast } = useToast();
 
   function toggleSelect(id: number) {
     setSelected(sel => sel.includes(id) ? sel.filter(i => i !== id) : [...sel, id])
@@ -33,8 +35,13 @@ export default function DocumentsPage() {
     setDriveFolderUrl("https://drive.google.com/drive/folders/AGORA_AI_FOLDER_ID")
   }
   function handleDownload(id: number) {
-    // TODO: Download file logic
-    alert("Download " + files.find(f => f.id === id)?.name)
+    const file = files.find(f => f.id === id);
+    if (file) {
+      toast({
+        title: "Download",
+        description: `Downloading ${file.name}`,
+      });
+    }
   }
   function handleDelete(id: number) {
     // TODO: Delete file logic

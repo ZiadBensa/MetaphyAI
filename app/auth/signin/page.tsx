@@ -11,9 +11,9 @@ import Image from "next/image"
 import Link from "next/link"
 
 export default function SignIn() {
+  const router = useRouter();
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
-  const router = useRouter()
   const searchParams = useSearchParams()
 
   useEffect(() => {
@@ -118,7 +118,7 @@ export default function SignIn() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => window.location.href = '/admin'}
+              onClick={() => router.push('/admin')}
               className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
             >
               Admin Access

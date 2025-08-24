@@ -4,9 +4,38 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import Image from "next/image"
 import { FileText, Sparkles, Brain, ShieldCheck, Zap, UserCheck, Lock, Rocket } from "lucide-react"
+import React from "react"
 
-export default function Landing() {
+
+export default function LandingPage() {
   const router = useRouter()
+  
+  // Clear all sessions on startup to ensure clean state
+  React.useEffect(() => {
+    // Only run on client side after mount
+    const clearSessions = () => {
+      try {
+        // Clear NextAuth session tokens
+        localStorage.removeItem('next-auth.session-token');
+        localStorage.removeItem('next-auth.csrf-token');
+        localStorage.removeItem('next-auth.callback-url');
+        localStorage.removeItem('next-auth.state');
+        
+        // Clear admin session
+        document.cookie = 'admin_session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+        
+        // Clear any other session-related storage
+        sessionStorage.clear();
+      } catch (error) {
+        // Silent error handling for session clearing
+      }
+    };
+
+    // Small delay to ensure component is fully mounted
+    const timer = setTimeout(clearSessions, 100);
+    return () => clearTimeout(timer);
+  }, []);
+
 
   return (
     <div className="relative min-h-screen flex flex-col bg-gradient-to-br from-slate-50 to-slate-200 text-gray-900 dark:from-[#18181b] dark:to-[#23232a] dark:text-white transition-colors duration-300 overflow-x-hidden">

@@ -6,8 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Check } from 'lucide-react';
 import { PRICING_TIERS } from '@/lib/pricing';
+import { useToast } from "@/hooks/use-toast"
+import { useRouter } from "next/navigation"
 
 export default function PricingPage() {
+  const router = useRouter();
+  const { toast } = useToast();
   const [selectedPlan, setSelectedPlan] = useState<string>('pro');
 
   const handleUpgrade = async (plan: string) => {
@@ -21,14 +25,23 @@ export default function PricingPage() {
       });
 
       if (response.ok) {
-        // Show success message or redirect
-        alert(`Successfully upgraded to ${plan} plan!`);
+        toast({
+          title: "Success!",
+          description: `Successfully upgraded to ${plan} plan!`,
+        });
       } else {
-        alert('Failed to upgrade plan. Please try again.');
+        toast({
+          title: "Upgrade failed",
+          description: "Failed to upgrade plan. Please try again.",
+          variant: "destructive",
+        });
       }
     } catch (error) {
-      console.error('Error upgrading plan:', error);
-      alert('An error occurred. Please try again.');
+      toast({
+        title: "Error",
+        description: "An error occurred. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -39,7 +52,7 @@ export default function PricingPage() {
         <div className="mb-8">
           <Button 
             variant="outline" 
-            onClick={() => window.location.href = '/'}
+            onClick={() => router.push('/')}
             className="flex items-center gap-2"
           >
             ← Back to Tools

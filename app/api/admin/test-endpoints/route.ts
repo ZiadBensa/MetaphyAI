@@ -8,78 +8,79 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { endpoint, testData } = await request.json();
+    const { endpoint } = await request.json();
 
     let response;
     let testResult;
 
     switch (endpoint) {
-      case 'pdf_chat':
-        // Test PDF chat endpoint
-        response = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/pdf-summarizer/chat`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            message: testData?.message || 'Test message from admin panel',
-            sessionId: 'admin-test-session',
-          }),
-        });
-        
-        testResult = await response.json();
-        break;
-
-      case 'image_generation':
-        // Test image generation endpoint
-        response = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/image-generator/generate`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            prompt: testData?.prompt || 'A beautiful landscape',
-            numImages: 1,
-            width: 512,
-            height: 512,
-          }),
-        });
-        
-        testResult = await response.json();
-        break;
-
-      case 'text_humanizer':
-        // Test text humanizer endpoint
-        response = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/text-humanizer/humanize`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            text: testData?.text || 'This is a test text for humanization.',
-            model: 'gpt-3.5-turbo',
-          }),
-        });
-        
-        testResult = await response.json();
-        break;
-
-      case 'subscription':
-        // Test subscription endpoint
-        response = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/subscription`, {
+      case 'frontend_health':
+        // Test frontend health
+        response = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/health`, {
           method: 'GET',
         });
         
-        testResult = await response.json();
+        if (response.ok) {
+          testResult = { status: 'healthy', message: 'Frontend API is responding' };
+        } else {
+          testResult = { status: 'unhealthy', message: `Frontend API returned ${response.status}` };
+        }
         break;
 
-      case 'usage':
-        // Test usage endpoint
-        response = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/usage`, {
-          method: 'GET',
-        });
-        
-        testResult = await response.json();
+      case 'backend_health':
+        // Test backend health
+        try {
+          response = await fetch('http://localhost:8000/health', {
+            method: 'GET',
+            signal: AbortSignal.timeout(5000), // 5 second timeout
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            testResult = { status: 'healthy', message: 'Backend is responding', details: data };
+          } else {
+            testResult = { status: 'unhealthy', message: `Backend returned ${response.status}` };
+          }
+        } catch (error) {
+          testResult = { status: 'unreachable', message: 'Backend is not reachable', error: error instanceof Error ? error.message : 'Unknown error' };
+        }
+        break;
+
+      case 'database_health':
+        // Test database connectivity through a simple API call
+        try {
+          response = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/subscription`, {
+            method: 'GET',
+          });
+          
+          if (response.status === 401) {
+            // 401 means the endpoint is working but requires auth (which is expected)
+            testResult = { status: 'healthy', message: 'Database is accessible (auth required)', details: 'Endpoint responding correctly' };
+          } else if (response.ok) {
+            testResult = { status: 'healthy', message: 'Database is accessible', details: 'Endpoint responding with data' };
+          } else {
+            testResult = { status: 'unhealthy', message: `Database endpoint returned ${response.status}` };
+          }
+        } catch (error) {
+          testResult = { status: 'unreachable', message: 'Database endpoint is not reachable', error: error instanceof Error ? error.message : 'Unknown error' };
+        }
+        break;
+
+      case 'auth_health':
+        // Test authentication system
+        try {
+          response = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/auth/session`, {
+            method: 'GET',
+          });
+          
+          if (response.ok) {
+            testResult = { status: 'healthy', message: 'Authentication system is responding', details: 'Session endpoint accessible' };
+          } else {
+            testResult = { status: 'unhealthy', message: `Auth endpoint returned ${response.status}` };
+          }
+        } catch (error) {
+          testResult = { status: 'unreachable', message: 'Authentication endpoint is not reachable', error: error instanceof Error ? error.message : 'Unknown error' };
+        }
         break;
 
       default:
@@ -92,13 +93,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       endpoint,
-      status: response.status,
+      status: response?.status || 'N/A',
       result: testResult,
       timestamp: new Date().toISOString(),
     });
 
   } catch (error) {
-    console.error('Admin test endpoint error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

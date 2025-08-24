@@ -17,6 +17,8 @@ import {
   Type
 } from 'lucide-react';
 import { PRICING_TIERS } from '@/lib/pricing';
+import { useRouter } from "next/navigation"
+import { useToast } from '@/components/ui/use-toast';
 
 interface UsageInfo {
   feature: string;
@@ -34,7 +36,9 @@ interface SubscriptionInfo {
 }
 
 export default function ProfilePage() {
+  const router = useRouter();
   const { data: session } = useSession();
+  const { toast } = useToast();
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
   const [usage, setUsage] = useState<UsageInfo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,7 +58,7 @@ export default function ProfilePage() {
         setUsage(data.usage);
       }
     } catch (error) {
-      console.error('Error fetching profile data:', error);
+      // Silent error handling for profile data fetch
     } finally {
       setLoading(false);
     }
@@ -119,7 +123,7 @@ export default function ProfilePage() {
       <div className="mb-8">
         <Button 
           variant="outline" 
-          onClick={() => window.location.href = '/'}
+          onClick={() => router.push('/')}
           className="flex items-center gap-2 mb-4"
         >
           ← Back to Tools
@@ -203,7 +207,7 @@ export default function ProfilePage() {
                 <Button 
                   className="w-full" 
                   variant="outline"
-                  onClick={() => window.location.href = '/pricing'}
+                  onClick={() => router.push('/pricing')}
                 >
                   Manage Subscription
                 </Button>
@@ -287,7 +291,7 @@ export default function ProfilePage() {
                   </div>
                   <Button 
                     variant="outline"
-                    onClick={() => window.location.href = '/pricing'}
+                    onClick={() => router.push('/pricing')}
                   >
                     {currentPlan === 'free' ? 'Upgrade' : 'Change Plan'}
                   </Button>

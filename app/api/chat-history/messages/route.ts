@@ -9,10 +9,8 @@ export async function POST(request: NextRequest, context: { params: Promise<any>
   try {
     await context.params
     const session = await getServerSession(authOptions)
-    console.log('Session in messages POST:', session)
     
     if (!session?.userId) {
-      console.log('No session or userId found in messages POST')
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
@@ -21,8 +19,7 @@ export async function POST(request: NextRequest, context: { params: Promise<any>
 
     const body = await request.json()
     const { sessionId, role, content } = body
-    console.log('Adding message:', { sessionId, role, contentLength: content?.length })
-
+        
     if (!sessionId || !role || !content) {
       return NextResponse.json(
         { error: 'Missing required fields' },
@@ -39,14 +36,11 @@ export async function POST(request: NextRequest, context: { params: Promise<any>
     })
 
     if (!chatSession) {
-      console.log('Chat session not found:', sessionId)
       return NextResponse.json(
         { error: 'Chat session not found' },
-        { status: 404 }
+        { status: 400 }
       )
     }
-
-    console.log('Found chat session, creating message')
     const message = await prisma.chatMessage.create({
       data: {
         sessionId,
@@ -61,11 +55,9 @@ export async function POST(request: NextRequest, context: { params: Promise<any>
       data: { updatedAt: new Date() }
     })
 
-    console.log('Message created:', message.id)
     return NextResponse.json({ message })
 
   } catch (error) {
-    console.error('Error adding message:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

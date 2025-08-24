@@ -71,7 +71,7 @@ export default function FileUpload({ onFileSelect, selectedFile, acceptedTypes, 
 
   const removeFile = () => {
     setError("")
-    onFileSelect(null as any) // Reset file selection
+    onFileSelect(null) // Reset file selection
   }
 
   const formatFileSize = (bytes: number): string => {

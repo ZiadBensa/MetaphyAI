@@ -8,12 +8,17 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { LogOut, User, Settings } from "lucide-react"
+import { LogOut, User, Settings, CreditCard, Palette, Shield, Download } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 export default function UserMenu() {
+  const router = useRouter();
   const { data: session } = useSession()
 
   if (!session?.user) return null
@@ -41,7 +46,7 @@ export default function UserMenu() {
           </Avatar>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-56" align="end" forceMount>
+      <DropdownMenuContent className="w-64" align="end" forceMount>
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
             <p className="text-sm font-medium leading-none">{session.user.name}</p>
@@ -49,14 +54,37 @@ export default function UserMenu() {
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => window.location.href = '/profile'}>
+        
+        <DropdownMenuItem onClick={() => router.push('/profile')}>
           <User className="mr-2 h-4 w-4" />
-          <span>Profile</span>
+          <span>Profile & Subscription</span>
         </DropdownMenuItem>
-        <DropdownMenuItem>
-          <Settings className="mr-2 h-4 w-4" />
-          <span>Settings</span>
-        </DropdownMenuItem>
+        
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            <Settings className="mr-2 h-4 w-4" />
+            <span>Settings</span>
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="w-48">
+            <DropdownMenuItem onClick={() => router.push('/settings')}>
+              <Palette className="mr-2 h-4 w-4" />
+              <span>Preferences</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => router.push('/billing')}>
+              <CreditCard className="mr-2 h-4 w-4" />
+              <span>Billing & Payment</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => router.push('/profile')}>
+              <Shield className="mr-2 h-4 w-4" />
+              <span>Privacy & Security</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => router.push('/settings')}>
+              <Download className="mr-2 h-4 w-4" />
+              <span>Data Management</span>
+            </DropdownMenuItem>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+        
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleSignOut}>
           <LogOut className="mr-2 h-4 w-4" />

@@ -20,6 +20,8 @@ import {
   XCircle,
   ArrowLeft
 } from 'lucide-react';
+import { useToast } from "@/hooks/use-toast"
+import { useRouter } from "next/navigation"
 
 interface User {
   id: string;
@@ -57,11 +59,17 @@ interface TestResult {
   success: boolean;
   endpoint: string;
   status: number;
-  result: any;
+  result: {
+    status: string;
+    message: string;
+    details?: Record<string, unknown>;
+    error?: string;
+  };
   timestamp: string;
 }
 
 export default function AdminDashboard() {
+  const router = useRouter();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState('');
   const [users, setUsers] = useState<User[]>([]);
@@ -73,6 +81,8 @@ export default function AdminDashboard() {
     prompt: 'A beautiful landscape',
     text: 'This is a test text for humanization.',
   });
+
+  const { toast } = useToast();
 
   useEffect(() => {
     checkAuth();
@@ -88,7 +98,7 @@ export default function AdminDashboard() {
         fetchDashboardData();
       }
     } catch (error) {
-      console.error('Auth check error:', error);
+      // Silent error handling for auth check
     }
   };
 
@@ -108,11 +118,18 @@ export default function AdminDashboard() {
         setIsAuthenticated(true);
         fetchDashboardData();
       } else {
-        alert('Invalid password');
+        toast({
+          title: 'Invalid password',
+          description: 'Please enter the correct admin password.',
+          variant: 'destructive',
+        });
       }
     } catch (error) {
-      console.error('Login error:', error);
-      alert('Login failed');
+      toast({
+        title: 'Login failed',
+        description: 'An error occurred during login.',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -127,7 +144,7 @@ export default function AdminDashboard() {
         setStatistics(data.statistics);
       }
     } catch (error) {
-      console.error('Dashboard fetch error:', error);
+      // Silent error handling for dashboard fetch
     } finally {
       setLoading(false);
     }
@@ -146,14 +163,24 @@ export default function AdminDashboard() {
       const data = await response.json();
       
       if (data.success) {
-        alert(data.message);
+        toast({
+          title: 'Success',
+          description: data.message,
+        });
         fetchDashboardData(); // Refresh data
       } else {
-        alert('Action failed');
+        toast({
+          title: 'Action failed',
+          description: data.message || 'An error occurred during the action.',
+          variant: 'destructive',
+        });
       }
     } catch (error) {
-      console.error('Admin action error:', error);
-      alert('Action failed');
+      toast({
+        title: 'Action failed',
+        description: 'An error occurred during the action.',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -164,7 +191,7 @@ export default function AdminDashboard() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ endpoint, testData }),
+        body: JSON.stringify({ endpoint }),
       });
 
       const result = await response.json();
@@ -172,11 +199,18 @@ export default function AdminDashboard() {
       if (result.success) {
         setTestResults(prev => [result, ...prev.slice(0, 9)]); // Keep last 10 results
       } else {
-        alert('Test failed');
+        toast({
+          title: 'Test failed',
+          description: result.message || 'An error occurred during the test.',
+          variant: 'destructive',
+        });
       }
     } catch (error) {
-      console.error('Test endpoint error:', error);
-      alert('Test failed');
+      toast({
+        title: 'Test failed',
+        description: 'An error occurred during the test.',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -200,7 +234,7 @@ export default function AdminDashboard() {
             </Button>
             <Button 
               variant="outline" 
-              onClick={() => window.location.href = '/'}
+              onClick={() => router.push('/')}
               className="w-full"
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
@@ -228,7 +262,7 @@ export default function AdminDashboard() {
           <div className="flex gap-2">
             <Button 
               variant="outline" 
-              onClick={() => window.location.href = '/'}
+              onClick={() => router.push('/')}
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to Tools
@@ -239,9 +273,9 @@ export default function AdminDashboard() {
                 try {
                   await fetch('/api/admin/logout', { method: 'POST' });
                   setIsAuthenticated(false);
-                } catch (error) {
-                  console.error('Logout error:', error);
-                }
+                    } catch (error) {
+      // Silent error handling for logout
+    }
               }}
             >
               Logout
@@ -349,7 +383,10 @@ export default function AdminDashboard() {
                           </p>
                         </div>
                         <div className="text-right">
-                          <Badge variant={user.subscription?.plan === 'pro' ? 'default' : 'secondary'}>
+                          <Badge 
+                            variant={user.subscription?.plan === 'pro' ? 'default' : 'secondary'}
+                            className={user.subscription?.plan === 'free' ? 'bg-gray-100 text-gray-800' : ''}
+                          >
                             {user.subscription?.plan || 'free'}
                           </Badge>
                           <p className="text-xs text-gray-500 mt-1">
@@ -382,6 +419,19 @@ export default function AdminDashboard() {
                         </Button>
                         <Button
                           size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            if (confirm(`Are you sure you want to reset ${user.email} back to free plan?`)) {
+                              handleAdminAction('reset_to_free', user.id);
+                            }
+                          }}
+                          className="bg-yellow-100 text-yellow-800 hover:bg-yellow-200 border-yellow-300"
+                        >
+                          <RefreshCw className="h-4 w-4 mr-1" />
+                          Reset to Free
+                        </Button>
+                        <Button
+                          size="sm"
                           variant="destructive"
                           onClick={() => {
                             if (confirm(`Are you sure you want to delete user ${user.email}?`)) {
@@ -407,55 +457,23 @@ export default function AdminDashboard() {
                 <CardTitle>API Endpoint Testing</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
-                {/* Test Data Inputs */}
-                <div className="grid md:grid-cols-3 gap-4">
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">PDF Chat Message</label>
-                    <Input
-                      value={testData.message}
-                      onChange={(e) => setTestData(prev => ({ ...prev, message: e.target.value }))}
-                      placeholder="Test message"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">Image Generation Prompt</label>
-                    <Input
-                      value={testData.prompt}
-                      onChange={(e) => setTestData(prev => ({ ...prev, prompt: e.target.value }))}
-                      placeholder="Test prompt"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">Text Humanizer Input</label>
-                    <Input
-                      value={testData.text}
-                      onChange={(e) => setTestData(prev => ({ ...prev, text: e.target.value }))}
-                      placeholder="Test text"
-                    />
-                  </div>
-                </div>
-
                 {/* Test Buttons */}
-                <div className="grid md:grid-cols-5 gap-2">
-                  <Button onClick={() => testEndpoint('pdf_chat')} className="w-full">
+                <div className="grid md:grid-cols-2 gap-4">
+                  <Button onClick={() => testEndpoint('frontend_health')} className="w-full">
                     <Play className="h-4 w-4 mr-2" />
-                    Test PDF Chat
+                    Test Frontend Health
                   </Button>
-                  <Button onClick={() => testEndpoint('image_generation')} className="w-full">
+                  <Button onClick={() => testEndpoint('backend_health')} className="w-full">
                     <Play className="h-4 w-4 mr-2" />
-                    Test Image Gen
+                    Test Backend Health
                   </Button>
-                  <Button onClick={() => testEndpoint('text_humanizer')} className="w-full">
+                  <Button onClick={() => testEndpoint('database_health')} className="w-full">
                     <Play className="h-4 w-4 mr-2" />
-                    Test Humanizer
+                    Test Database Health
                   </Button>
-                  <Button onClick={() => testEndpoint('subscription')} className="w-full">
+                  <Button onClick={() => testEndpoint('auth_health')} className="w-full">
                     <Play className="h-4 w-4 mr-2" />
-                    Test Subscription
-                  </Button>
-                  <Button onClick={() => testEndpoint('usage')} className="w-full">
-                    <Play className="h-4 w-4 mr-2" />
-                    Test Usage
+                    Test Auth Health
                   </Button>
                 </div>
 
@@ -470,16 +488,18 @@ export default function AdminDashboard() {
                             <span className="font-medium capitalize">
                               {result.endpoint.replace('_', ' ')}
                             </span>
-                            <div className="flex items-center gap-2">
-                              <Badge variant={result.status === 200 ? 'default' : 'destructive'}>
-                                {result.status}
-                              </Badge>
-                              {result.success ? (
-                                <CheckCircle className="h-4 w-4 text-green-500" />
-                              ) : (
-                                <XCircle className="h-4 w-4 text-red-500" />
-                              )}
-                            </div>
+                                                       <div className="flex items-center gap-2">
+                             <Badge variant={result.result?.status === 'healthy' ? 'default' : result.result?.status === 'unreachable' ? 'destructive' : 'secondary'}>
+                               {result.result?.status || 'unknown'}
+                             </Badge>
+                             {result.result?.status === 'healthy' ? (
+                               <CheckCircle className="h-4 w-4 text-green-500" />
+                             ) : result.result?.status === 'unreachable' ? (
+                               <XCircle className="h-4 w-4 text-red-500" />
+                             ) : (
+                               <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                             )}
+                           </div>
                           </div>
                           <div className="text-xs text-gray-500 mb-1">
                             {new Date(result.timestamp).toLocaleString()}

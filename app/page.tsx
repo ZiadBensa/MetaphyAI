@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { FileText, Menu, X, Download, Trash, UploadCloud, Upload, Send, Loader2, ChevronDown, ChevronUp, History, Clock } from "lucide-react"
 import AuthGuard from "@/components/auth/auth-guard"
 import TextHumanizer from "@/components/text-humanizer"
@@ -14,6 +15,7 @@ import { useSession, signIn } from "next-auth/react"
 import UserMenu from "@/components/auth/user-menu"
 import React from "react"
 import { useToast } from "@/hooks/use-toast"
+
 import {
   AlertDialog,
   AlertDialogTrigger,
@@ -29,6 +31,67 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Slider } from "@/components/ui/slider"
+
+// TypeScript Interfaces
+interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+  timestamp: Date;
+}
+
+interface ChatHistoryItem {
+  id: string;
+  pdfFileName: string;
+  summary: string;
+  createdAt: string;
+  updatedAt: string;
+  messages?: ChatMessage[];
+}
+
+interface GeneratedImage {
+  id?: string;
+  url?: string;
+  image_url?: string;
+  prompt: string;
+  model: string;
+  timestamp?: Date;
+}
+
+interface ApiStatus {
+  status: string;
+  message?: string;
+  details?: Record<string, unknown>;
+}
+
+interface ValidationError {
+  field?: string;
+  message?: string;
+  loc?: string[];
+  msg?: string;
+}
+
+interface DriveFile {
+  id: string;
+  name: string;
+  size?: number;
+  type?: string;
+  mimeType?: string;
+  created_at?: string;
+  updated_at?: string;
+  createdTime?: string;
+  modifiedTime?: string;
+  thumbnail?: string;
+  typeLabel?: string;
+  webContentLink?: string;
+  webViewLink?: string;
+  driveFileId?: string;
+  base64?: string;
+}
+
+interface DriveListData {
+  files: DriveFile[];
+  total: number;
+}
 
 // AdvancedOptionsPanel component
 function AdvancedOptionsPanel({ children, label = "Advanced Options" }: { children: React.ReactNode; label?: string }) {
@@ -99,52 +162,80 @@ function PdfSummarizer({ droppedFileName, autoProcess }: { droppedFileName?: str
   const [isSending, setIsSending] = useState(false);
   const [isUploadCollapsed, setIsUploadCollapsed] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [chatHistory, setChatHistory] = useState<Array<any>>([]);
+  const [chatHistory, setChatHistory] = useState<ChatHistoryItem[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [userSubscription, setUserSubscription] = useState<{ plan: string; status: string } | null>(null);
   const { toast } = useToast ? useToast() : { toast: () => {} };
 
   // Function to refresh session
   const refreshSession = async () => {
     try {
-      console.log('Refreshing session...');
       const response = await fetch('/api/auth/session');
       if (response.ok) {
         const sessionData = await response.json();
-        console.log('Session refreshed:', sessionData);
-        return sessionData;
+        if (sessionData.user) {
+          // Session refreshed successfully
+        }
       }
     } catch (error) {
-      console.error('Error refreshing session:', error);
+      console.error('Failed to refresh session:', error);
     }
-    return null;
   };
 
-  React.useEffect(() => { 
-    if (droppedFileName) {
-      // Handle dropped file if needed
-      console.log('Dropped file:', droppedFileName);
+  // Function to fetch user subscription
+  const fetchUserSubscription = async () => {
+    try {
+      const response = await fetch('/api/subscription');
+      if (response.ok) {
+        const data = await response.json();
+        setUserSubscription(data.subscription);
+      }
+    } catch (error) {
+      console.error('Failed to fetch subscription:', error);
     }
-  }, [droppedFileName]);
+  };
+
+  // Clear all sessions on startup to ensure clean state
+  React.useEffect(() => {
+    // Only run on client side after mount
+    const clearSessions = () => {
+      try {
+        // Clear NextAuth session tokens
+        localStorage.removeItem('next-auth.session-token');
+        localStorage.removeItem('next-auth.csrf-token');
+        localStorage.removeItem('next-auth.callback-url');
+        localStorage.removeItem('next-auth.state');
+        
+        // Clear admin session
+        document.cookie = 'admin_session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+        
+        // Clear any other session-related storage
+        sessionStorage.clear();
+      } catch (error) {
+        // Silent error handling for session clearing
+      }
+    };
+
+    // Small delay to ensure component is fully mounted
+    const timer = setTimeout(clearSessions, 100);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Load chat history
   const loadChatHistory = async () => {
     try {
       setIsLoadingHistory(true);
-      console.log('Loading chat history...');
       const response = await fetch('/api/chat-history');
-      console.log('History response status:', response.status);
       
       if (response.ok) {
         const data = await response.json();
-        console.log('Chat history data:', data);
         setChatHistory(data.sessions || []);
       } else {
         const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
-        console.error('Failed to load chat history:', errorData);
+        // Silent error handling
       }
     } catch (error) {
-      console.error('Error loading chat history:', error);
       toast({
         title: "Error",
         description: "Failed to load chat history",
@@ -171,7 +262,7 @@ function PdfSummarizer({ droppedFileName, autoProcess }: { droppedFileName?: str
         
         setPdfText(session.pdfText);
         setCurrentSessionId(session.id);
-        setChatMessages(session.messages.map((msg: any) => ({
+        setChatMessages(session.messages.map((msg: { role: string; content: string; timestamp: string }) => ({
           role: msg.role,
           content: msg.content,
           timestamp: new Date(msg.timestamp)
@@ -187,7 +278,6 @@ function PdfSummarizer({ droppedFileName, autoProcess }: { droppedFileName?: str
         });
       }
     } catch (error) {
-      console.error('Error loading chat session:', error);
       toast({
         title: "Error",
         description: "Failed to load chat session",
@@ -217,7 +307,6 @@ function PdfSummarizer({ droppedFileName, autoProcess }: { droppedFileName?: str
         });
       }
     } catch (error) {
-      console.error('Error deleting chat session:', error);
       toast({
         title: "Error",
         description: "Failed to delete chat session",
@@ -266,7 +355,7 @@ function PdfSummarizer({ droppedFileName, autoProcess }: { droppedFileName?: str
         }
       }
     } catch (error) {
-      console.error('Error checking usage:', error);
+      // Silent error handling for usage check
     }
 
     setIsUploading(true);
@@ -311,12 +400,11 @@ function PdfSummarizer({ droppedFileName, autoProcess }: { droppedFileName?: str
           body: JSON.stringify({ feature: 'pdf_chat', amount: 1 })
         });
       } catch (error) {
-        console.error('Error incrementing usage:', error);
+        // Silent error handling for usage increment
       }
       
       // Create chat session
       const summary = generateSummary(data.text);
-      console.log('Creating chat session with summary:', summary);
       
       // Refresh session to ensure we have the latest userId
       await refreshSession();
@@ -333,17 +421,14 @@ function PdfSummarizer({ droppedFileName, autoProcess }: { droppedFileName?: str
         }),
       });
 
-      console.log('Session response status:', sessionResponse.status);
-      
       let sessionId = null;
       if (sessionResponse.ok) {
         const sessionData = await sessionResponse.json();
         sessionId = sessionData.session.id;
         setCurrentSessionId(sessionId);
-        console.log('Session created with ID:', sessionId);
       } else {
         const errorData = await sessionResponse.json().catch(() => ({ error: "Unknown error" }));
-        console.error('Failed to create session:', errorData);
+        // Silent error handling for session creation
       }
       
       toast({
@@ -363,7 +448,7 @@ function PdfSummarizer({ droppedFileName, autoProcess }: { droppedFileName?: str
       // Save initial message to database using the just-created sessionId
       if (sessionId) {
         try {
-          console.log('Saving initial message to session:', sessionId);
+          
           const messageResponse = await fetch('/api/chat-history/messages', {
             method: 'POST',
             headers: {
@@ -377,23 +462,22 @@ function PdfSummarizer({ droppedFileName, autoProcess }: { droppedFileName?: str
           });
           
           if (messageResponse.ok) {
-            console.log('Initial message saved successfully');
+            // Message saved successfully
           } else {
             const errorData = await messageResponse.json().catch(() => ({ error: "Unknown error" }));
-            console.error('Failed to save initial message:', errorData);
+            // Silent error handling for message save
           }
         } catch (error) {
-          console.error('Error saving initial message:', error);
+          // Silent error handling for message save
         }
       } else {
-        console.error('No session ID available to save initial message');
+        // No session ID available
       }
 
       // Collapse the upload section after successful upload
       setIsUploadCollapsed(true);
 
     } catch (error) {
-      console.error("Upload error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
       toast({
         title: "Upload failed",
@@ -422,7 +506,6 @@ function PdfSummarizer({ droppedFileName, autoProcess }: { droppedFileName?: str
     // Save user message to database
     if (currentSessionId) {
       try {
-        console.log('Saving user message to session:', currentSessionId);
         const userMessageResponse = await fetch('/api/chat-history/messages', {
           method: 'POST',
           headers: {
@@ -436,16 +519,16 @@ function PdfSummarizer({ droppedFileName, autoProcess }: { droppedFileName?: str
         });
         
         if (userMessageResponse.ok) {
-          console.log('User message saved successfully');
+          // Message saved successfully
         } else {
           const errorData = await userMessageResponse.json().catch(() => ({ error: "Unknown error" }));
-          console.error('Failed to save user message:', errorData);
+          // Silent error handling for message save
         }
       } catch (error) {
-        console.error('Error saving user message:', error);
+        // Silent error handling for message save
       }
     } else {
-      console.error('No current session ID available to save user message');
+      // No session ID available
     }
 
     try {
@@ -477,7 +560,6 @@ function PdfSummarizer({ droppedFileName, autoProcess }: { droppedFileName?: str
       // Save assistant message to database
       if (currentSessionId) {
         try {
-          console.log('Saving assistant message to session:', currentSessionId);
           const assistantMessageResponse = await fetch('/api/chat-history/messages', {
             method: 'POST',
             headers: {
@@ -491,19 +573,18 @@ function PdfSummarizer({ droppedFileName, autoProcess }: { droppedFileName?: str
           });
           
           if (assistantMessageResponse.ok) {
-            console.log('Assistant message saved successfully');
+            // Message saved successfully
           } else {
             const errorData = await assistantMessageResponse.json().catch(() => ({ error: "Unknown error" }));
-            console.error('Failed to save assistant message:', errorData);
+            // Silent error handling for message save
           }
         } catch (error) {
-          console.error('Error saving assistant message:', error);
+          // Silent error handling for message save
         }
       } else {
-        console.error('No current session ID available to save assistant message');
+        // No session ID available
       }
     } catch (error) {
-      console.error("Chat error:", error);
       toast({
         title: "Error",
         description: "Failed to get response. Please try again.",
@@ -815,16 +896,9 @@ function ImageGenerator({ droppedFileName, autoProcess }: { droppedFileName?: st
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedImages, setGeneratedImages] = useState<Array<{ id: string; url: string; prompt: string; model: string; timestamp: Date }>>([]);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [apiStatus, setApiStatus] = useState<any>(null);
+  const [apiStatus, setApiStatus] = useState<ApiStatus | null>(null);
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const { toast } = useToast ? useToast() : { toast: () => {} };
-
-  React.useEffect(() => { 
-    if (droppedFileName) {
-      // Handle dropped file if needed
-      console.log('Dropped file:', droppedFileName);
-    }
-  }, [droppedFileName]);
 
   const checkApiStatus = async () => {
     setIsCheckingStatus(true);
@@ -887,7 +961,7 @@ function ImageGenerator({ droppedFileName, autoProcess }: { droppedFileName?: st
         }
       }
     } catch (error) {
-      console.error('Error checking usage:', error);
+      // Silent error handling for usage check
     }
 
     setIsGenerating(true);
@@ -904,7 +978,7 @@ function ImageGenerator({ droppedFileName, autoProcess }: { droppedFileName?: st
           num_inference_steps: inferenceSteps,
         };
         
-        console.log("Sending request to backend:", JSON.stringify(requestBody, null, 2));
+        
 
               const response = await fetch("http://localhost:8000/image-generator/generate", {
         method: "POST",
@@ -916,12 +990,12 @@ function ImageGenerator({ droppedFileName, autoProcess }: { droppedFileName?: st
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
-        console.error("Backend error response:", JSON.stringify(errorData, null, 2));
+        
         
         // Handle validation errors more specifically
         if (response.status === 422 && errorData.detail) {
           const validationErrors = Array.isArray(errorData.detail) ? errorData.detail : [errorData.detail];
-          const errorMessages = validationErrors.map((err: any) => 
+          const errorMessages = validationErrors.map((err: ValidationError) => 
             `${err.loc?.join('.') || 'field'}: ${err.msg || err.message || 'validation error'}`
           ).join(', ');
           throw new Error(`Validation error: ${errorMessages}`);
@@ -945,7 +1019,7 @@ function ImageGenerator({ droppedFileName, autoProcess }: { droppedFileName?: st
           body: JSON.stringify({ feature: 'image_generation', amount: numImages })
         });
       } catch (error) {
-        console.error('Error incrementing usage:', error);
+        // Silent error handling for usage increment
       }
       
       // Check if images array exists
@@ -954,7 +1028,7 @@ function ImageGenerator({ droppedFileName, autoProcess }: { droppedFileName?: st
       }
       
       // Add generated images to the list
-      const newImages = data.images.map((image: any, index: number) => ({
+      const newImages = data.images.map((image: GeneratedImage, index: number) => ({
         id: `img-${Date.now()}-${index}`,
         url: image.image_url,
         prompt: image.prompt,
@@ -969,20 +1043,19 @@ function ImageGenerator({ droppedFileName, autoProcess }: { droppedFileName?: st
         description: `Created ${data.total_images} image(s) in ${data.processing_time.toFixed(1)}s`,
       });
 
-    } catch (error: any) {
-      console.error("Generation error:", error);
+    } catch (error: unknown) {
       
       // Handle specific error cases
-      let errorMessage = error.message || "Failed to create images. Please try again.";
+      let errorMessage = error instanceof Error ? error.message : "Failed to create images. Please try again.";
       let errorTitle = "Creation failed";
       
-      if (error.message && error.message.includes("Model not loaded")) {
+      if (errorMessage.includes("Model not loaded")) {
         errorTitle = "Model Not Ready";
         errorMessage = "Local model is still loading. Please wait a moment and try again.";
-      } else if (error.message && error.message.includes("memory")) {
+      } else if (errorMessage.includes("memory")) {
         errorTitle = "Memory Issue";
         errorMessage = "Not enough memory to generate images. Try reducing image size or inference steps.";
-      } else if (error.message && error.message.includes("timeout")) {
+      } else if (errorMessage.includes("timeout")) {
         errorTitle = "Creation Timeout";
         errorMessage = "Image creation took too long. Try reducing inference steps or image size.";
       }
@@ -1125,10 +1198,10 @@ function ImageGenerator({ droppedFileName, autoProcess }: { droppedFileName?: st
                 />
                 {selectedStyle === "custom" && (
                   <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
-                    <p>💡 <strong>Custom style</strong> - Optimized for logos, icons, and clean designs</p>
-                    <p>🎯 <strong>Perfect for:</strong> Company logos, app icons, simple graphics, technical diagrams</p>
-                    <p>📝 <strong>Example:</strong> "simple gear icon, minimal design, flat style, white background"</p>
-                    <p>💪 <strong>Tips:</strong> Be specific about colors, style, and background. Use terms like "minimal", "clean", "professional"</p>
+                    <p> <strong>Custom style</strong> - Optimized for logos, icons, and clean designs</p>
+                    <p> <strong>Perfect for:</strong> Company logos, app icons, simple graphics, technical diagrams</p>
+                    <p> <strong>Example:</strong> "simple gear icon, minimal design, flat style, white background"</p>
+                    <p> <strong>Tips:</strong> Be specific about colors, style, and background. Use terms like "minimal", "clean", "professional"</p>
                   </div>
                 )}
               </div>
@@ -1388,6 +1461,7 @@ const toolDescriptions: Record<string, string> = {
 }
 
 export default function Home() {
+  const router = useRouter();
   const [selected, setSelected] = useState("pdf")
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const { data: session } = useSession()
@@ -1416,7 +1490,21 @@ export default function Home() {
     if (type.includes('wordprocessingml')) return 'doc'
     return 'other'
   }
-  const [galleryFilesState, setGalleryFilesState] = useState<any[]>([])
+  const [galleryFilesState, setGalleryFilesState] = useState<DriveFile[]>([])
+  const [userSubscription, setUserSubscription] = useState<{ plan: string; status: string } | null>(null)
+
+  // Function to fetch user subscription
+  const fetchUserSubscription = async () => {
+    try {
+      const response = await fetch('/api/subscription');
+      if (response.ok) {
+        const data = await response.json();
+        setUserSubscription(data.subscription);
+      }
+    } catch (error) {
+      console.error('Failed to fetch subscription:', error);
+    }
+  };
 
   // Fetch files from Google Drive AgoraAI folder when opening the panel
   async function fetchDocuments() {
@@ -1426,14 +1514,15 @@ export default function Home() {
       setGalleryFilesState((data.files || []).map((file: any) => ({
         id: file.id,
         name: file.name,
-        type: file.mimeType,
-        typeLabel: getTypeKey(file.mimeType).charAt(0).toUpperCase() + getTypeKey(file.mimeType).slice(1),
-        thumbnail: file.mimeType.startsWith('image/') ? file.webContentLink || '/placeholder-logo.png' : '/placeholder-logo.png',
+        type: file.mimeType || 'unknown',
+        typeLabel: getTypeKey(file.mimeType || 'unknown').charAt(0).toUpperCase() + getTypeKey(file.mimeType || 'unknown').slice(1),
+        thumbnail: file.mimeType?.startsWith('image/') ? file.webContentLink || '/placeholder-logo.png' : '/placeholder-logo.png',
         driveFileId: file.id,
         webViewLink: file.webViewLink,
         webContentLink: file.webContentLink,
-        createdAt: file.createdTime,
-        updatedAt: file.modifiedTime,
+        createdTime: file.createdTime,
+        modifiedTime: file.modifiedTime,
+        mimeType: file.mimeType,
       })))
     }
   }
@@ -1532,14 +1621,14 @@ export default function Home() {
 
   // Exporting state
   const [exportingId, setExportingId] = useState<number | null>(null)
-  async function handleExport(file: any) {
+  async function handleExport(file: DriveFile) {
     setExportingId(file.id)
     try {
       // Check for duplicate file name in Drive
       const driveListRes = await fetch('/api/drive-list')
       if (driveListRes.ok) {
         const driveListData = await driveListRes.json()
-        const duplicate = (driveListData.files || []).find((f: any) => f.name === file.name)
+        const duplicate = (driveListData.files || []).find((f: DriveFile) => f.name === file.name)
         if (duplicate) {
           toast({
             title: "Duplicate file name",
@@ -1585,10 +1674,10 @@ export default function Home() {
           variant: "destructive",
         })
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast({
         title: "Export failed",
-        description: err.message,
+        description: err instanceof Error ? err.message : "Unknown error occurred",
         variant: "destructive",
       })
     } finally {
@@ -1598,7 +1687,7 @@ export default function Home() {
 
   // Add state for delete dialog
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [fileToDelete, setFileToDelete] = useState<any>(null)
+  const [fileToDelete, setFileToDelete] = useState<DriveFile | null>(null)
 
   // Update handleDelete to work with dialog
   async function confirmDelete() {
@@ -1624,10 +1713,10 @@ export default function Home() {
           variant: 'destructive',
         })
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast({
         title: 'Delete failed',
-        description: err.message,
+        description: err instanceof Error ? err.message : "Unknown error occurred",
         variant: 'destructive',
       })
     } finally {
@@ -1638,6 +1727,28 @@ export default function Home() {
 
   // Filtered files for gallery
   const filteredFiles = docFilter === 'all' ? galleryFilesState : galleryFilesState.filter(f => getTypeKey(f.type) === docFilter)
+
+  // Fetch user subscription on mount
+  React.useEffect(() => {
+    if (session?.user) {
+      fetchUserSubscription();
+    }
+  }, [session?.user]);
+
+  // Session clearing effect
+  React.useEffect(() => {
+    // Clear NextAuth session tokens
+    localStorage.removeItem('next-auth.session-token');
+    localStorage.removeItem('next-auth.csrf-token');
+    localStorage.removeItem('next-auth.callback-url');
+    localStorage.removeItem('next-auth.state');
+    
+    // Clear admin session
+    document.cookie = 'admin_session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+    
+    // Clear any other session-related storage
+    sessionStorage.clear();
+  }, []);
 
   return (
     <AuthGuard>
@@ -1664,13 +1775,23 @@ export default function Home() {
                   Welcome, {session.user.name?.split(" ")[0]}!
                 </div>
               )}
-              <Button 
-                variant="outline" 
-                className="hidden sm:flex items-center gap-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white border-0 hover:from-blue-600 hover:to-purple-700"
-                onClick={() => window.location.href = '/pricing'}
-              >
-                Try Pro
-              </Button>
+              {userSubscription?.plan !== 'pro' && (
+                <Button 
+                  variant="outline" 
+                  className="hidden sm:flex items-center gap-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white border-0 hover:from-blue-600 hover:to-purple-700"
+                  onClick={() => router.push('/pricing')}
+                >
+                  Try Pro
+                </Button>
+              )}
+              {userSubscription?.plan === 'pro' && (
+                <div className="hidden sm:flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-md text-sm font-medium">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Pro Member
+                </div>
+              )}
               <UserMenu />
             </div>
           </div>
@@ -1733,14 +1854,23 @@ export default function Home() {
                 <span className="font-bold text-lg tracking-tight">AgoraAI</span>
               </div>
               <div className="flex items-center gap-2">
-                <Button 
-                  size="sm"
-                  variant="outline" 
-                  className="bg-gradient-to-r from-blue-500 to-purple-600 text-white border-0 hover:from-blue-600 hover:to-purple-700 text-xs"
-                  onClick={() => window.location.href = '/pricing'}
-                >
-                  Pro
-                </Button>
+                {userSubscription?.plan !== 'pro' ? (
+                  <Button 
+                    size="sm"
+                    variant="outline" 
+                    className="bg-gradient-to-r from-blue-500 to-purple-600 text-white border-0 hover:from-blue-600 hover:to-purple-700 text-xs"
+                    onClick={() => router.push('/pricing')}
+                  >
+                    Pro
+                  </Button>
+                ) : (
+                  <div className="flex items-center gap-1 px-2 py-1 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded text-xs font-medium">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Pro
+                  </div>
+                )}
                 <button onClick={() => setSidebarOpen(true)} aria-label="Open sidebar">
                   <Menu className="h-6 w-6" />
                 </button>
@@ -1797,25 +1927,25 @@ export default function Home() {
                     </button>
                   ))}
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {filteredFiles.length === 0 && <div className="col-span-full text-center text-gray-400 py-12">No documents found.</div>}
                   {(docFilter === 'all' ? galleryFilesState : galleryFilesState.filter(f => getTypeKey(f.type) === docFilter)).map(file => (
                     <div
                       key={file.id}
-                      className="relative bg-white dark:bg-[#18181b] rounded-lg shadow p-3 flex flex-col items-center cursor-pointer hover:shadow-lg transition group"
+                      className="relative bg-white dark:bg-[#18181b] rounded-lg shadow p-4 flex flex-col items-center cursor-pointer hover:shadow-lg transition group"
                       draggable
                       onDragStart={e => { e.dataTransfer.setData('text/plain', file.id.toString()) }}
                     >
                       {/* Preview: image for images, icon for others */}
                       {file.type.startsWith('image/') ? (
-                        <img src={file.thumbnail} alt={file.name} className="w-32 h-20 object-cover rounded mb-2" />
+                        <img src={file.thumbnail} alt={file.name} className="w-48 h-32 object-cover rounded mb-3" />
                       ) : (
-                        <div className="w-32 h-20 flex items-center justify-center bg-slate-100 dark:bg-[#23232a] rounded mb-2">
-                          <svg className="w-10 h-10 text-blue-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M7 7v10M17 7v10M5 5h14a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2z" /></svg>
+                        <div className="w-48 h-32 flex items-center justify-center bg-slate-100 dark:bg-[#23232a] rounded mb-3">
+                          <svg className="w-16 h-16 text-blue-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M7 7v10M17 7v10M5 5h14a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2z" /></svg>
                         </div>
                       )}
-                      <div className="font-medium truncate w-full text-center" title={file.name}>{file.name}</div>
-                      <div className="text-xs text-gray-500 mb-2">{file.typeLabel}</div>
+                      <div className="font-medium truncate w-full text-center text-sm mb-1" title={file.name}>{file.name}</div>
+                      <div className="text-xs text-gray-500 mb-3">{file.typeLabel}</div>
                       <div className="flex flex-row gap-2 mt-auto w-full justify-center">
                         <a
                           title="Download"
